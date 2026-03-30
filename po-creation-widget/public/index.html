@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <title>Create Purchase Order</title>
+    <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+
+    <!-- Init Zoho SDK BEFORE React loads to catch the PageLoad event -->
+    <script>
+      window.__ZOHO_PAGE_DATA__ = null;
+      window.__ZOHO_SDK_READY__ = false;
+      window.__ZOHO_SDK_ERROR__ = null;
+
+      try {
+        if (window.ZOHO) {
+          ZOHO.embeddedApp.on("PageLoad", function(data) {
+            console.log("PageLoad (inline) fired:", JSON.stringify(data));
+            window.__ZOHO_PAGE_DATA__ = data;
+            window.__ZOHO_SDK_READY__ = true;
+          });
+          ZOHO.embeddedApp.init().then(function() {
+            console.log("ZOHO.embeddedApp.init() resolved");
+            window.__ZOHO_SDK_READY__ = true;
+          }).catch(function(err) {
+            console.error("ZOHO.embeddedApp.init() rejected:", err);
+            window.__ZOHO_SDK_ERROR__ = err;
+            window.__ZOHO_SDK_READY__ = true;
+          });
+        } else {
+          console.error("ZOHO SDK script not loaded.");
+          window.__ZOHO_SDK_ERROR__ = "Zoho SDK not loaded.";
+          window.__ZOHO_SDK_READY__ = true;
+        }
+      } catch(e) {
+        console.error("SDK init error:", e);
+        window.__ZOHO_SDK_ERROR__ = e.message;
+        window.__ZOHO_SDK_READY__ = true;
+      }
+    </script>
+  </body>
+</html>

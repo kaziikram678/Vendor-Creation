@@ -1,0 +1,22 @@
+{
+  "service": "ZOHO_CRM",
+  "cspDomains": {
+    "connect-src": [
+      "https://www.zohoapis.com",
+      "https://accounts.zoho.com"
+    ]
+  },
+  "components": {
+    "widgets": [
+      {
+        "name": "BillCreationWidget",
+        "label": "Create Bill",
+        "default_height": "600",
+        "default_width": "100%",
+        "url": "/index.html",
+        "logo": "",
+        "description": "Create bills in Zoho Books from CRM Vendor records"
+      }
+    ]
+  }
+}

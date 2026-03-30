@@ -1,0 +1,97 @@
+void automation.creating_vendor_on_zoho_books(Int vendor_id)
+{
+booksOrgId = "771340721";
+
+	// Fetch vendor details from CRM
+	crmVendorInfo = zoho.crm.getRecordById("Vendors", vendor_id);
+
+	// Extract relevant fields
+	existingBooksId = crmVendorInfo.get("Books_Vendor_ID");
+	vendorEmail = crmVendorInfo.get("Email");
+	vendorDesc = crmVendorInfo.get("Description");
+	mobileNum = crmVendorInfo.get("Mobile");
+	phoneNum = crmVendorInfo.get("Work_Phone");
+	langCode = crmVendorInfo.get("Language");
+	vName = crmVendorInfo.get("Vendor_Name");
+	addrStreet = crmVendorInfo.get("Street");
+	addrCity = crmVendorInfo.get("City");
+	addrState = crmVendorInfo.get("State");
+	addrCountry = crmVendorInfo.get("Country");
+	inactiveFlag = crmVendorInfo.get("Inactive");
+
+	// Build the payload for Books API
+	contactPayload = {
+	  "contact_name": vName,
+	  "contact_type": "vendor",
+	  "email": vendorEmail,
+	  "mobile": mobileNum,
+	  "phone": phoneNum,
+	  "language_code_formatted": langCode,
+	  "contact_persons": {
+		{
+		  "email": vendorEmail,
+		  "phone": phoneNum,
+		  "mobile": mobileNum,
+		  "is_primary_contact": true
+		}
+	  },
+	  "billing_address": {
+		"street2": addrStreet,
+		"city": addrCity,
+		"state": addrState,
+		"country": addrCountry
+	  },
+	  "shipping_address": {
+		  "street2": addrStreet,
+		  "city": addrCity,
+		  "state": addrState,
+		  "country": addrCountry
+		},
+	  "status": if(!inactiveFlag,
+	  "active",
+	  "inactive")
+	};
+	info contactPayload;
+
+	if(existingBooksId != null)
+	{
+		// Vendor already linked to Books — attempt update
+		putResp = invokeurl
+		[
+			url :"https://www.zohoapis.com/books/v3/contacts/" + existingBooksId + "?organization_id=" + booksOrgId
+			type :PUT
+			parameters:contactPayload.toString()
+			connection:"zoho_books_testing"
+		];
+		respCode = putResp.get("code");
+
+		// If Books returns 1002 the contact was not found — create fresh
+		if(respCode == 1002)
+		{
+			contactPayload.put("custom_fields",{{"api_name":"cf_crm_vendor_id","value":vendor_id}});
+			postResp = invokeurl
+			[
+				url :"https://www.zohoapis.com/books/v3/contacts?organization_id=" + booksOrgId
+				type :POST
+				parameters:contactPayload.toString()
+				connection:"zoho_books_testing"
+			];
+			createdId = ifnull(postResp.get("contact"),Map()).get("contact_id");
+			zoho.crm.updateRecord("Vendors", vendor_id, {"Books_Vendor_ID":createdId});
+		}
+	}
+	else
+	{
+		// No Books ID on record — create new vendor contact in Books
+		contactPayload.put("custom_fields",{{"api_name":"cf_crm_vendor_id","value":vendor_id}});
+		postResp = invokeurl
+		[
+			url :"https://www.zohoapis.com/books/v3/contacts?organization_id=" + booksOrgId
+			type :POST
+			parameters:contactPayload.toString()
+			connection:"zoho_books_testing"
+		];
+		createdId = ifnull(postResp.get("contact"),Map()).get("contact_id");
+		zoho.crm.updateRecord("Vendors", vendor_id, {"Books_Vendor_ID":createdId});
+	}
+}

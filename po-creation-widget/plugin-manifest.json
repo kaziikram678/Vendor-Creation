@@ -1,0 +1,22 @@
+{
+  "service": "ZOHO_CRM",
+  "cspDomains": {
+    "connect-src": [
+      "https://www.zohoapis.com",
+      "https://accounts.zoho.com"
+    ]
+  },
+  "components": {
+    "widgets": [
+      {
+        "name": "PurchaseOrderWidget",
+        "label": "Create Purchase Order",
+        "default_height": "600",
+        "default_width": "100%",
+        "url": "/index.html",
+        "logo": "",
+        "description": "Create purchase orders in Zoho Books from CRM Vendor records"
+      }
+    ]
+  }
+}

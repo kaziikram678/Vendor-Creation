@@ -1,0 +1,54 @@
+void automation.create_bill_on_zoho_books(Int vendor_id, String billPayloadJson)
+{
+	booksOrgId = "771340721";
+
+	// Fetch vendor to get the Books contact ID
+	crmVendorInfo = zoho.crm.getRecordById("Vendors", vendor_id);
+	booksVendorId = crmVendorInfo.get("Books_Vendor_ID");
+
+	if(booksVendorId == null || booksVendorId == "")
+	{
+		info "Error: Vendor " + vendor_id + " has no Books_Vendor_ID. Cannot create bill.";
+		return;
+	}
+
+	// Parse the incoming JSON payload from the widget
+	billPayload = billPayloadJson.toMap();
+
+	// Ensure vendor_id is set correctly
+	billPayload.put("vendor_id", booksVendorId);
+
+	// Add CRM back-reference custom field
+	billPayload.put("custom_fields", {{
+		"api_name": "cf_crm_vendor_id",
+		"value": vendor_id
+	}});
+
+	info billPayload;
+
+	// Create the bill in Zoho Books
+	postResp = invokeurl
+	[
+		url: "https://www.zohoapis.com/books/v3/bills?organization_id=" + booksOrgId
+		type: POST
+		parameters: billPayload.toString()
+		connection: "zoho_books_testing"
+	];
+
+	respCode = postResp.get("code");
+	info "Books API response code: " + respCode;
+	info postResp;
+
+	if(respCode == 0)
+	{
+		createdBill = ifnull(postResp.get("bill"), Map());
+		billId = createdBill.get("bill_id");
+		billNumber = createdBill.get("bill_number");
+		info "Bill created successfully: " + billNumber + " (ID: " + billId + ")";
+	}
+	else
+	{
+		errorMsg = ifnull(postResp.get("message"), "Unknown error from Zoho Books");
+		info "Error creating bill: " + errorMsg;
+	}
+}
