@@ -80,10 +80,10 @@ export default function LineItemTable({
         <Table size="small">
           <TableHead>
             <TableRow sx={{ backgroundColor: "#fafafa" }}>
-              <TableCell sx={{ fontWeight: 600, minWidth: 200 }}>Item Details</TableCell>
+              <TableCell sx={{ fontWeight: 600, minWidth: 220 }}>Item Details</TableCell>
               <TableCell sx={{ fontWeight: 600, minWidth: 150 }}>Account</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 90 }}>Quantity</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 100 }}>Rate</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 110 }}>Quantity</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 110 }}>Rate</TableCell>
               <TableCell sx={{ fontWeight: 600, minWidth: 140 }}>Tax</TableCell>
               <TableCell sx={{ fontWeight: 600, width: 100 }}>Amount</TableCell>
               <TableCell sx={{ width: 50 }}></TableCell>
@@ -91,7 +91,7 @@ export default function LineItemTable({
           </TableHead>
           <TableBody>
             {lineItems.map((row, idx) => (
-              <TableRow key={idx} hover>
+              <TableRow key={idx} hover sx={{ verticalAlign: "top" }}>
                 <TableCell>
                   <Autocomplete
                     size="small"
@@ -104,6 +104,19 @@ export default function LineItemTable({
                       <TextField {...params} placeholder="Select an item" variant="outlined" size="small" />
                     )}
                     noOptionsText="No items found"
+                  />
+                  <TextField
+                    placeholder="Add a description to your item"
+                    value={row.description || ""}
+                    onChange={(e) => handleFieldChange(idx, "description", e.target.value)}
+                    size="small"
+                    fullWidth
+                    multiline
+                    minRows={1}
+                    maxRows={3}
+                    variant="standard"
+                    sx={{ mt: 0.5, "& .MuiInput-root": { fontSize: 12, color: "#888" } }}
+                    InputProps={{ disableUnderline: true }}
                   />
                 </TableCell>
 

@@ -38,24 +38,37 @@ export default function LineItemTable({ lineItems, setLineItems, items, taxes, a
         <Table size="small">
           <TableHead>
             <TableRow sx={{ bgcolor: "#fafbfc" }}>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 200 }}>ITEM DETAILS</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 140 }}>ACCOUNT</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 80 }}>QUANTITY</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 90 }}>RATE</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 130 }}>TAX</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 90 }} align="right">AMOUNT</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 220 }}>ITEM DETAILS</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 150 }}>ACCOUNT</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 110 }}>QUANTITY</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 110 }}>RATE</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 140 }}>TAX</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 100 }} align="right">AMOUNT</TableCell>
               <TableCell sx={{ width: 40 }} />
             </TableRow>
           </TableHead>
           <TableBody>
             {lineItems.map((row, idx) => (
-              <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#f5f7ff" } }}>
+              <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#f5f7ff" }, verticalAlign: "top" }}>
                 <TableCell>
                   <Autocomplete size="small" options={items} getOptionLabel={(o) => o.name || ""}
                     value={items.find((i) => i.item_id === row.item_id) || null}
                     onChange={(_, v) => selectItem(idx, v)}
                     isOptionEqualToValue={(a, b) => a.item_id === b.item_id}
                     renderInput={(p) => <TextField {...p} placeholder="Select an item" variant="outlined" size="small" />}
+                  />
+                  <TextField
+                    placeholder="Add a description to your item"
+                    value={row.description || ""}
+                    onChange={(e) => set(idx, "description", e.target.value)}
+                    size="small"
+                    fullWidth
+                    multiline
+                    minRows={1}
+                    maxRows={3}
+                    variant="standard"
+                    sx={{ mt: 0.5, "& .MuiInput-root": { fontSize: 12, color: "#888" } }}
+                    InputProps={{ disableUnderline: true }}
                   />
                 </TableCell>
                 <TableCell>

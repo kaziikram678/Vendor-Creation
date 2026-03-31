@@ -9,15 +9,13 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import PaymentIcon from "@mui/icons-material/Payment";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import CancelIcon from "@mui/icons-material/Cancel";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import RefreshIcon from "@mui/icons-material/Refresh";
 
 import BillForm from "./BillForm";
 import RecordPaymentForm from "./RecordPaymentForm";
 import {
-  getCurrentVendor, fetchItems, fetchTaxes, fetchChartOfAccounts, listBills, deleteBill, approveBill, rejectBill,
+  getCurrentVendor, fetchItems, fetchTaxes, fetchChartOfAccounts, listBills, deleteBill,
 } from "../services/zohoService";
 
 const STATUS_COLORS = {
@@ -115,44 +113,6 @@ export default function Dashboard({ entityId }) {
     }
   };
 
-  // -- Approve --
-  const [approveConfirm, setApproveConfirm] = useState(null);
-  const [approving, setApproving] = useState(false);
-
-  const handleApprove = async () => {
-    if (!approveConfirm) return;
-    setApproving(true);
-    try {
-      await approveBill(approveConfirm.bill_id);
-      setSnackbar({ open: true, message: `Bill "${approveConfirm.bill_number}" approved and marked as Open.`, severity: "success" });
-      setApproveConfirm(null);
-      await loadBills();
-    } catch (err) {
-      setSnackbar({ open: true, message: "Failed to approve bill: " + err.message, severity: "error" });
-    } finally {
-      setApproving(false);
-    }
-  };
-
-  // -- Reject --
-  const [rejectConfirm, setRejectConfirm] = useState(null);
-  const [rejecting, setRejecting] = useState(false);
-
-  const handleReject = async () => {
-    if (!rejectConfirm) return;
-    setRejecting(true);
-    try {
-      await rejectBill(rejectConfirm.bill_id);
-      setSnackbar({ open: true, message: `Bill "${rejectConfirm.bill_number}" rejected.`, severity: "success" });
-      setRejectConfirm(null);
-      await loadBills();
-    } catch (err) {
-      setSnackbar({ open: true, message: "Failed to reject bill: " + err.message, severity: "error" });
-    } finally {
-      setRejecting(false);
-    }
-  };
-
   // -- Navigation --
   const openBillForm = (id = null) => { setEditId(id); setView("bill-form"); };
   const openPayment = (billId) => { setPaymentBillId(billId); setView("payment"); };
@@ -163,7 +123,7 @@ export default function Dashboard({ entityId }) {
     return (
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, gap: 2 }}>
         <CircularProgress size={36} />
-        <Typography color="text.secondary">Loading vendor data...</Typography>
+        <Typography color="text.secondary">Loading Bill data...</Typography>
       </Box>
     );
   }
@@ -171,7 +131,7 @@ export default function Dashboard({ entityId }) {
   // -- Form views --
   if (view === "bill-form") {
     return (
-      <Box sx={{ maxWidth: 1000, mx: "auto", p: 2 }}>
+      <Box sx={{ maxWidth: 1200, mx: "auto", p: 2 }}>
         <BillForm vendor={vendor} items={items} taxes={taxes} accounts={accounts} editBillId={editId} onBack={backToList} />
       </Box>
     );
@@ -186,7 +146,7 @@ export default function Dashboard({ entityId }) {
 
   // -- Dashboard list view --
   return (
-    <Box sx={{ maxWidth: 1100, mx: "auto", p: 2 }}>
+    <Box sx={{ maxWidth: 1400, mx: "auto", p: 2 }}>
       {/* Header */}
       <Paper elevation={0} sx={{
         p: 2.5, mb: 3, borderRadius: 3,
@@ -262,20 +222,6 @@ export default function Dashboard({ entityId }) {
                     <TableCell sx={tdStyle} align="right">{formatCurrency(b.balance)}</TableCell>
                     <TableCell>
                       <Box sx={{ display: "flex", gap: 0.5 }}>
-                        {(b.status === "draft" || b.status === "pending_approval") && (
-                          <Tooltip title="Approve">
-                            <IconButton size="small" color="info" onClick={() => setApproveConfirm(b)}>
-                              <CheckCircleIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                        {b.status === "pending_approval" && (
-                          <Tooltip title="Reject">
-                            <IconButton size="small" color="warning" onClick={() => setRejectConfirm(b)}>
-                              <CancelIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        )}
                         {(b.status === "open" || b.status === "partially_paid" || b.status === "overdue") && (
                           <Tooltip title="Record Payment">
                             <IconButton size="small" color="success" onClick={() => openPayment(b.bill_id)}>
@@ -302,40 +248,6 @@ export default function Dashboard({ entityId }) {
           )}
         </TableContainer>
       </Paper>
-
-      {/* Approve Confirmation Dialog */}
-      <Dialog open={!!approveConfirm} onClose={() => !approving && setApproveConfirm(null)}>
-        <DialogTitle>Approve Bill</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Approve bill <strong>"{approveConfirm?.bill_number}"</strong>? This will approve the bill and change its status to Open.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setApproveConfirm(null)} disabled={approving}>Cancel</Button>
-          <Button onClick={handleApprove} color="info" variant="contained" disabled={approving}
-            startIcon={approving ? <CircularProgress size={16} color="inherit" /> : <CheckCircleIcon />}>
-            {approving ? "Approving..." : "Approve"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Reject Confirmation Dialog */}
-      <Dialog open={!!rejectConfirm} onClose={() => !rejecting && setRejectConfirm(null)}>
-        <DialogTitle>Reject Bill</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to reject bill <strong>"{rejectConfirm?.bill_number}"</strong>? This will reject the bill.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setRejectConfirm(null)} disabled={rejecting}>Cancel</Button>
-          <Button onClick={handleReject} color="warning" variant="contained" disabled={rejecting}
-            startIcon={rejecting ? <CircularProgress size={16} color="inherit" /> : <CancelIcon />}>
-            {rejecting ? "Rejecting..." : "Reject"}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteConfirm} onClose={() => !deleting && setDeleteConfirm(null)}>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Box, Typography, Button, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, CircularProgress, Alert,
-  Paper, IconButton, Tooltip, Snackbar,
+  Paper, IconButton, Tooltip, Snackbar, Popover, Link,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -17,7 +17,7 @@ import PurchaseOrderForm from "./PurchaseOrderForm";
 import ConvertToBillForm from "./ConvertToBillForm";
 import {
   getCurrentVendor, fetchItems, fetchTaxes, fetchChartOfAccounts,
-  listPurchaseOrders, deletePurchaseOrder, markPoAsIssued,
+  listPurchaseOrders, deletePurchaseOrder, markPoAsIssued, getPurchaseOrder,
 } from "../services/zohoService";
 
 const STATUS_COLORS = {
@@ -134,6 +134,24 @@ export default function Dashboard({ entityId }) {
     }
   };
 
+  // -- View Bills popover --
+  const [billsAnchor, setBillsAnchor] = useState(null);
+  const [billsList, setBillsList] = useState([]);
+  const [billsLoading, setBillsLoading] = useState(false);
+
+  const handleViewBills = async (event, poId) => {
+    setBillsAnchor(event.currentTarget);
+    setBillsLoading(true);
+    try {
+      const po = await getPurchaseOrder(poId);
+      setBillsList(po.bills || []);
+    } catch {
+      setBillsList([]);
+    } finally {
+      setBillsLoading(false);
+    }
+  };
+
   // -- Navigation --
   const openPoForm = (id = null) => { setEditId(id); setView("po-form"); };
   const openConvertToBill = (poId) => { setConvertPoId(poId); setView("convert-to-bill"); };
@@ -144,7 +162,7 @@ export default function Dashboard({ entityId }) {
     return (
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, gap: 2 }}>
         <CircularProgress size={36} />
-        <Typography color="text.secondary">Loading vendor data...</Typography>
+        <Typography color="text.secondary">Loading Purchase Order data...</Typography>
       </Box>
     );
   }
@@ -152,14 +170,14 @@ export default function Dashboard({ entityId }) {
   // -- Form views --
   if (view === "po-form") {
     return (
-      <Box sx={{ maxWidth: 1000, mx: "auto", p: 2 }}>
+      <Box sx={{ maxWidth: 1200, mx: "auto", p: 2 }}>
         <PurchaseOrderForm vendor={vendor} items={items} taxes={taxes} accounts={accounts} editPoId={editId} onBack={backToList} />
       </Box>
     );
   }
   if (view === "convert-to-bill") {
     return (
-      <Box sx={{ maxWidth: 1000, mx: "auto", p: 2 }}>
+      <Box sx={{ maxWidth: 1200, mx: "auto", p: 2 }}>
         <ConvertToBillForm vendor={vendor} items={items} taxes={taxes} accounts={accounts} poId={convertPoId} onBack={backToList} />
       </Box>
     );
@@ -167,7 +185,7 @@ export default function Dashboard({ entityId }) {
 
   // -- Dashboard list view --
   return (
-    <Box sx={{ maxWidth: 1100, mx: "auto", p: 2 }}>
+    <Box sx={{ maxWidth: 1400, mx: "auto", p: 2 }}>
       {/* Header */}
       <Paper elevation={0} sx={{
         p: 2.5, mb: 3, borderRadius: 3,
@@ -241,6 +259,13 @@ export default function Dashboard({ entityId }) {
                     <TableCell sx={tdStyle} align="right">{formatCurrency(p.total)}</TableCell>
                     <TableCell>
                       <Box sx={{ display: "flex", gap: 0.5 }}>
+                        {(p.status === "closed" || p.status === "billed") && (
+                          <Tooltip title="View Bills">
+                            <IconButton size="small" color="primary" onClick={(e) => handleViewBills(e, p.purchaseorder_id)}>
+                              <ReceiptLongIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                         {p.status === "draft" && (
                           <Tooltip title="Mark as Issued">
                             <IconButton size="small" color="info" onClick={() => setIssueConfirm(p)}>
@@ -308,6 +333,54 @@ export default function Dashboard({ entityId }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* View Bills Popover */}
+      <Popover
+        open={!!billsAnchor}
+        anchorEl={billsAnchor}
+        onClose={() => setBillsAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
+      >
+        <Box sx={{ p: 2, minWidth: 300 }}>
+          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Bills</Typography>
+          {billsLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}><CircularProgress size={20} /></Box>
+          ) : billsList.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No bills linked to this purchase order.</Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Bill#</TableCell>
+                  <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Date</TableCell>
+                  <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 700, fontSize: 11 }} align="right">Amount</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {billsList.map((bill) => (
+                  <TableRow key={bill.bill_id} hover>
+                    <TableCell>
+                      <Link
+                        component="button"
+                        variant="body2"
+                        sx={{ fontWeight: 600, cursor: "pointer" }}
+                        onClick={() => window.open(`https://books.zoho.com/app/771340721#/bills/${bill.bill_id}`, "_blank")}
+                      >
+                        {bill.bill_number}
+                      </Link>
+                    </TableCell>
+                    <TableCell sx={{ fontSize: 12 }}>{bill.date}</TableCell>
+                    <TableCell><StatusChip status={bill.status} /></TableCell>
+                    <TableCell align="right" sx={{ fontSize: 12 }}>{formatCurrency(bill.total)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Box>
+      </Popover>
 
       <Snackbar open={snackbar.open} autoHideDuration={4000}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
