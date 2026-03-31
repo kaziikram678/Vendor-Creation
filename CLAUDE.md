@@ -12,10 +12,10 @@ Vendor_Creation/
     src/
       App.js                   # Entry point, Zoho SDK init, MUI theme
       components/
-        Dashboard.js           # Bill list view with actions (approve, reject, record payment, edit, delete)
+        Dashboard.js           # Bill list view with actions (record payment, edit, delete)
         BillForm.js            # Create/edit bill form (Save as Draft / Save and Submit / Save and Approve)
         RecordPaymentForm.js   # Record payment against an open bill
-        LineItemTable.js       # Shared line items table component
+        LineItemTable.js       # Shared line items table with description field
         TotalsSection.js       # Shared totals/discount/adjustment section
       services/
         zohoService.js         # All Zoho CRM + Books API calls (bills, items, taxes, accounts, payments)
@@ -23,10 +23,10 @@ Vendor_Creation/
     src/
       App.js                   # Entry point, Zoho SDK init, MUI theme
       components/
-        Dashboard.js           # PO list view with actions (mark as issued, convert to bill, edit, delete)
+        Dashboard.js           # PO list view with actions (mark as issued, convert to bill, view bills, edit, delete)
         PurchaseOrderForm.js   # Create/edit purchase order form
         ConvertToBillForm.js   # Convert an issued PO to a bill (pre-filled bill form)
-        LineItemTable.js       # Shared line items table component
+        LineItemTable.js       # Shared line items table with description field
         TotalsSection.js       # Shared totals/discount/adjustment section
       services/
         zohoService.js         # All Zoho CRM + Books API calls (POs, items, taxes, accounts, bills)
@@ -70,21 +70,22 @@ npm test           # Run tests
 ## Bill Widget Workflow
 
 - **Create**: Save as Draft / Save and Submit (→ pending_approval) / Save and Approve (→ open)
-- **Approve**: Draft or pending_approval bills can be approved (→ open)
-- **Reject**: Pending approval bills can be rejected (→ rejected)
 - **Record Payment**: Open/partially_paid/overdue bills can have payments recorded via `/vendorpayments` API
 - **Edit/Delete**: Available on all bills
 - Items filtered to exclude sales-only items (`item_type !== "sales"`)
 - Due date picker prevents selecting dates before bill date
+- Line items include a description field below the item selector
 
 ## PO Widget Workflow
 
 - **Create**: Save as Draft / Save as Open
 - **Mark as Issued**: Draft POs can be marked as issued via `/purchaseorders/{id}/status/issued`
 - **Convert to Bill**: Issued POs can be converted to a bill (creates bill with `purchaseorder_ids` linking)
+- **View Bills**: Closed/billed POs show a popover with linked bills (clickable to open in Zoho Books)
 - **Edit/Delete**: Available on all POs
 - Items filtered to exclude sales-only items
 - Accounts fetched from multiple types: Expense, CostOfGoodsSold, FixedAsset, OtherCurrentAsset
+- Line items include a description field below the item selector
 
 ## API Patterns
 
@@ -98,6 +99,6 @@ npm test           # Run tests
 
 - Functional React components with hooks (no class components)
 - MUI `sx` prop for styling (no separate CSS files in src/)
-- Confirmation dialogs before destructive actions (delete, approve, reject)
+- Confirmation dialogs before destructive actions (delete, mark as issued)
 - Snackbar notifications for success/error feedback
 - Deluge scripts (`.dg` files) are server-side automation that run within Zoho CRM workflows
