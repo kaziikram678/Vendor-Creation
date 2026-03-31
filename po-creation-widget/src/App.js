@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 import { Box, Typography, CircularProgress, Alert, Button } from "@mui/material";
-import PurchaseOrderForm from "./components/PurchaseOrderForm";
+import Dashboard from "./components/Dashboard";
 import { initZohoSDK } from "./services/zohoService";
 
 const theme = createTheme({
   palette: {
-    primary: { main: "#1976d2" },
+    primary: { main: "#1565c0" },
     success: { main: "#2e7d32" },
+    background: { default: "#f5f6fa" },
   },
   typography: {
-    fontFamily: "'Roboto', 'Segoe UI', sans-serif",
+    fontFamily: "'Inter', 'Roboto', 'Segoe UI', sans-serif",
+  },
+  shape: { borderRadius: 8 },
+  components: {
+    MuiButton: { styleOverrides: { root: { textTransform: "none", fontWeight: 600 } } },
+    MuiPaper: { styleOverrides: { root: { borderRadius: 8 } } },
   },
 });
 
@@ -21,33 +27,16 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
-
     initZohoSDK()
       .then((pageData) => {
         if (!mounted) return;
-        console.log("SDK resolved with:", JSON.stringify(pageData));
-
         const raw = pageData?.EntityId;
         const id = Array.isArray(raw) ? raw[0] : (raw || pageData?.id || null);
-
-        if (!id) {
-          setSdkError(
-            "Could not determine the current Vendor record. Received: " +
-            JSON.stringify(pageData) +
-            ". Please open this widget from a Vendor record."
-          );
-        } else {
-          setEntityId(String(id));
-        }
+        if (!id) setSdkError("Could not determine the current Vendor record.");
+        else setEntityId(String(id));
       })
-      .catch((err) => {
-        if (!mounted) return;
-        setSdkError(err.message || "Failed to initialize Zoho SDK.");
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
+      .catch((err) => { if (mounted) setSdkError(err.message); })
+      .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, []);
 
@@ -62,12 +51,10 @@ export default function App() {
       ) : sdkError ? (
         <Box sx={{ p: 4, textAlign: "center" }}>
           <Alert severity="error" sx={{ mb: 2 }}>{sdkError}</Alert>
-          <Button variant="outlined" onClick={() => window.location.reload()}>
-            Retry
-          </Button>
+          <Button variant="outlined" onClick={() => window.location.reload()}>Retry</Button>
         </Box>
       ) : (
-        <PurchaseOrderForm entityId={entityId} />
+        <Dashboard entityId={entityId} />
       )}
     </ThemeProvider>
   );

@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Box, Grid, TextField, MenuItem, Typography, Button, Alert, CircularProgress,
-  Snackbar, Paper, IconButton,
+  Snackbar, Paper, IconButton, ButtonGroup, Popper, Grow, ClickAwayListener,
+  MenuList,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import SaveIcon from "@mui/icons-material/Save";
 import dayjs from "dayjs";
 
 import LineItemTable, { createEmptyRow } from "./LineItemTable";
 import TotalsSection from "./TotalsSection";
-import { getBill, createBill, updateBill } from "../services/zohoService";
+import { getBill, createBill, updateBill, submitBillForApproval, approveBill } from "../services/zohoService";
 
 const PAYMENT_TERMS = [
   { value: 0, label: "Due on Receipt" }, { value: 15, label: "Net 15" },
@@ -127,6 +129,14 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
       if (isEdit) {
         await updateBill(editBillId, payload);
         setSnackbar({ open: true, message: "Bill updated successfully!", severity: "success" });
+      } else if (status === "submit") {
+        const bill = await createBill(payload, "draft");
+        await submitBillForApproval(bill.bill_id);
+        setSnackbar({ open: true, message: "Bill submitted for approval!", severity: "success" });
+      } else if (status === "approve") {
+        const bill = await createBill(payload, "draft");
+        await approveBill(bill.bill_id);
+        setSnackbar({ open: true, message: "Bill created and approved!", severity: "success" });
       } else {
         await createBill(payload, status);
         setSnackbar({ open: true, message: "Bill created successfully!", severity: "success" });
@@ -173,7 +183,7 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
           </Grid>
           <Grid item xs={12} sm={4}>
             <TextField label="Due Date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-              fullWidth size="small" InputLabelProps={{ shrink: true }} />
+              fullWidth size="small" InputLabelProps={{ shrink: true }} inputProps={{ min: billDate }} />
           </Grid>
           <Grid item xs={6} sm={2}>
             <TextField select label="Tax Type" value={taxType} onChange={(e) => setTaxType(e.target.value)} fullWidth size="small">
@@ -200,22 +210,69 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
           fullWidth size="small" placeholder="Notes (not shown in PDF)" />
       </Paper>
 
-      <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end", mb: 4 }}>
-        <Button variant="outlined" onClick={onBack} disabled={submitting}>Cancel</Button>
-        {isEdit ? (
+      {isEdit ? (
+        <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end", mb: 4 }}>
+          <Button variant="outlined" onClick={onBack} disabled={submitting}>Cancel</Button>
           <Button variant="contained" startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
             onClick={() => handleSubmit()} disabled={submitting}>{submitting ? "Saving..." : "Update Bill"}</Button>
-        ) : (<>
-          <Button variant="contained" startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-            onClick={() => handleSubmit("draft")} disabled={submitting}>{submitting ? "Saving..." : "Save as Draft"}</Button>
-          <Button variant="contained" color="success" startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-            onClick={() => handleSubmit("open")} disabled={submitting}>{submitting ? "Saving..." : "Save as Open"}</Button>
-        </>)}
-      </Box>
+        </Box>
+      ) : (
+        <CreateBillActions submitting={submitting} onCancel={onBack} onSubmit={handleSubmit} />
+      )}
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((s) => ({ ...s, open: false }))} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
         <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>{snackbar.message}</Alert>
       </Snackbar>
+    </Box>
+  );
+}
+
+function CreateBillActions({ submitting, onCancel, onSubmit }) {
+  const [open, setOpen] = React.useState(false);
+  const anchorRef = React.useRef(null);
+  const options = [
+    { label: "Save and Submit", status: "submit" },
+    { label: "Save and Approve", status: "approve" },
+  ];
+  const [selectedIdx, setSelectedIdx] = React.useState(0);
+
+  return (
+    <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end", mb: 4 }}>
+      <Button variant="outlined" onClick={onCancel} disabled={submitting}>Cancel</Button>
+      <Button variant="contained"
+        startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+        onClick={() => onSubmit("draft")} disabled={submitting}
+        sx={{ bgcolor: "#fff", color: "#1565c0", border: "1px solid #1565c0", "&:hover": { bgcolor: "#e3f2fd" } }}>
+        {submitting ? "Saving..." : "Save as Draft"}
+      </Button>
+      <ButtonGroup variant="contained" color="primary" ref={anchorRef} disabled={submitting}>
+        <Button
+          startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+          onClick={() => onSubmit(options[selectedIdx].status)}>
+          {submitting ? "Saving..." : options[selectedIdx].label}
+        </Button>
+        <Button size="small" onClick={() => setOpen((prev) => !prev)}>
+          <ArrowDropDownIcon />
+        </Button>
+      </ButtonGroup>
+      <Popper open={open} anchorEl={anchorRef.current} transition placement="top-end" sx={{ zIndex: 1300 }}>
+        {({ TransitionProps }) => (
+          <Grow {...TransitionProps}>
+            <Paper elevation={4}>
+              <ClickAwayListener onClickAway={() => setOpen(false)}>
+                <MenuList>
+                  {options.map((opt, idx) => (
+                    <MenuItem key={opt.label} selected={idx === selectedIdx}
+                      onClick={() => { setSelectedIdx(idx); setOpen(false); }}>
+                      {opt.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </ClickAwayListener>
+            </Paper>
+          </Grow>
+        )}
+      </Popper>
     </Box>
   );
 }

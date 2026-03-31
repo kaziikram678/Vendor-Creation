@@ -85,11 +85,14 @@ async function booksApi(method, endpoint, payload) {
 
 export async function fetchItems() {
   const data = await booksApi("GET", "/items");
-  return (data.items || []).map((i) => ({
-    item_id: i.item_id, name: i.name, rate: i.rate || 0,
-    description: i.description || "", tax_id: i.tax_id || "",
-    account_id: i.account_id || "", unit: i.unit || "",
-  }));
+  return (data.items || [])
+    .filter((i) => i.item_type !== "sales")
+    .map((i) => ({
+      item_id: i.item_id, name: i.name, rate: i.purchase_rate || i.rate || 0,
+      description: i.purchase_description || i.description || "",
+      tax_id: i.tax_id || "", account_id: i.purchase_account_id || i.account_id || "",
+      unit: i.unit || "",
+    }));
 }
 
 export async function fetchTaxes() {
@@ -119,8 +122,7 @@ export async function getBill(billId) {
 }
 
 export async function createBill(payload, status = "draft") {
-  payload.status = status;
-  const data = await booksApi("POST", "/bills", payload);
+  const data = await booksApi("POST", `/bills?status=${status}`, payload);
   return data.bill || data;
 }
 
@@ -129,25 +131,41 @@ export async function updateBill(billId, payload) {
   return data.bill || data;
 }
 
-/* ========== Purchase Orders ========== */
-
-export async function listPurchaseOrders(vendorId) {
-  const data = await booksApi("GET", `/purchaseorders?vendor_id=${vendorId}`);
-  return data.purchaseorders || [];
+export async function deleteBill(billId) {
+  return await booksApi("DELETE", `/bills/${billId}`);
 }
 
-export async function getPurchaseOrder(poId) {
-  const data = await booksApi("GET", `/purchaseorders/${poId}`);
-  return data.purchaseorder || data;
+export async function submitBillForApproval(billId) {
+  return await booksApi("POST", `/bills/${billId}/submit`, {});
 }
 
-export async function createPurchaseOrder(payload, status = "draft") {
-  payload.status = status;
-  const data = await booksApi("POST", "/purchaseorders", payload);
-  return data.purchaseorder || data;
+export async function approveBill(billId) {
+  return await booksApi("POST", `/bills/${billId}/approve`, {});
 }
 
-export async function updatePurchaseOrder(poId, payload) {
-  const data = await booksApi("PUT", `/purchaseorders/${poId}`, payload);
-  return data.purchaseorder || data;
+export async function rejectBill(billId) {
+  return await booksApi("POST", `/bills/${billId}/reject`, {});
 }
+
+/* ========== Bill Payments ========== */
+
+export async function recordBillPayment(billId, payload) {
+  payload.bills = [{ bill_id: billId, amount_applied: payload.amount }];
+  const data = await booksApi("POST", "/vendorpayments", payload);
+  return data.vendorpayment || data;
+}
+
+export async function fetchPaidThroughAccounts() {
+  const PAID_THROUGH_TYPES = [
+    "cash", "bank", "other_current_liability", "equity",
+    "other_current_asset", "other_asset", "fixed_asset",
+  ];
+  const data = await booksApi("GET", "/chartofaccounts");
+  const all = (data.chartofaccounts || []).filter((a) =>
+    PAID_THROUGH_TYPES.includes(a.account_type?.toLowerCase())
+  );
+  return all.map((a) => ({
+    account_id: a.account_id, account_name: a.account_name, account_type: a.account_type,
+  }));
+}
+

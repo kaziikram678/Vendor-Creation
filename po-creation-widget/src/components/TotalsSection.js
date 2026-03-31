@@ -26,21 +26,19 @@ export default function TotalsSection({
     : discountNum;
 
   let taxTotal = 0;
-  if (isItemLevelTax) {
-    lineItems.forEach((row) => {
-      if (!row.tax_id) return;
-      const tax = taxes.find((t) => t.tax_id === row.tax_id);
-      if (!tax) return;
-      const qty = parseFloat(row.quantity) || 0;
-      const rate = parseFloat(row.rate) || 0;
-      const lineAmount = qty * rate;
-      if (isInclusiveTax) {
-        taxTotal += lineAmount - lineAmount / (1 + tax.tax_percentage / 100);
-      } else {
-        taxTotal += (lineAmount * tax.tax_percentage) / 100;
-      }
-    });
-  }
+  lineItems.forEach((row) => {
+    if (!row.tax_id) return;
+    const tax = taxes.find((t) => t.tax_id === row.tax_id);
+    if (!tax) return;
+    const qty = parseFloat(row.quantity) || 0;
+    const rate = parseFloat(row.rate) || 0;
+    const lineAmount = qty * rate;
+    if (isInclusiveTax) {
+      taxTotal += lineAmount - lineAmount / (1 + tax.tax_percentage / 100);
+    } else {
+      taxTotal += (lineAmount * tax.tax_percentage) / 100;
+    }
+  });
 
   const afterDiscount = subTotal - discountAmt;
   const adjustment = parseFloat(adjustmentValue) || 0;
@@ -78,7 +76,7 @@ export default function TotalsSection({
           </Typography>
         </Box>
 
-        {isItemLevelTax && !isInclusiveTax && (
+        {!isInclusiveTax && taxTotal > 0 && (
           <Row label="Tax" value={taxTotal.toFixed(2)} />
         )}
 

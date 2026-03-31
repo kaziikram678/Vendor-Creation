@@ -12,15 +12,13 @@ export default function TotalsSection({
   const discountAmt = discountType === "percent" ? (subTotal * discNum) / 100 : discNum;
 
   let taxTotal = 0;
-  if (isItemLevelTax) {
-    lineItems.forEach((r) => {
-      if (!r.tax_id) return;
-      const t = taxes.find((tx) => tx.tax_id === r.tax_id);
-      if (!t) return;
-      const la = (parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0);
-      taxTotal += isInclusiveTax ? la - la / (1 + t.tax_percentage / 100) : (la * t.tax_percentage) / 100;
-    });
-  }
+  lineItems.forEach((r) => {
+    if (!r.tax_id) return;
+    const t = taxes.find((tx) => tx.tax_id === r.tax_id);
+    if (!t) return;
+    const la = (parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0);
+    taxTotal += isInclusiveTax ? la - la / (1 + t.tax_percentage / 100) : (la * t.tax_percentage) / 100;
+  });
 
   const adj = parseFloat(adjustmentValue) || 0;
   const total = isInclusiveTax ? subTotal - discountAmt + adj : subTotal - discountAmt + taxTotal + adj;
@@ -41,7 +39,7 @@ export default function TotalsSection({
           </TextField>
           <Typography variant="body2" sx={{ flex: 1, textAlign: "right", fontWeight: 500 }}>{discountAmt.toFixed(2)}</Typography>
         </Box>
-        {isItemLevelTax && !isInclusiveTax && <Row label="Tax" value={taxTotal.toFixed(2)} />}
+        {!isInclusiveTax && taxTotal > 0 && <Row label="Tax" value={taxTotal.toFixed(2)} />}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, my: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", width: 100, justifyContent: "flex-end", gap: 0.3 }}>
             <Typography variant="body2" color="#5f6368">Adjustment</Typography>
