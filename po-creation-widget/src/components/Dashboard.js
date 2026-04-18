@@ -21,7 +21,7 @@ import ConvertToBillForm from "./ConvertToBillForm";
 import {
   getCurrentVendor, fetchItems, fetchTaxes, fetchChartOfAccounts, fetchCustomFields,
   listPurchaseOrders, deletePurchaseOrder, markPoAsIssued, getPurchaseOrder,
-  getLocallyBilledPoIds, getLocalBillsForPo, getBill,
+  getLocallyBilledPoIds, getLocalBillsForPo, getBill, listBillsForVendor,
 } from "../services/zohoService";
 
 const STATUS_COLORS = {
@@ -53,6 +53,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
   const [poCustomFields, setPoCustomFields] = useState([]);
   const [billCustomFields, setBillCustomFields] = useState([]);
   const [locallyBilled, setLocallyBilled] = useState(() => new Set());
+  const [billsByPo, setBillsByPo] = useState({});
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
@@ -85,6 +86,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
 
       setLocallyBilled(getLocallyBilledPoIds(v.booksVendorId));
       await loadPOs(v.booksVendorId);
+      loadBillsByPo(v.booksVendorId);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -92,6 +94,50 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entityId]);
+
+  const loadBillsByPo = async (vendorId) => {
+    try {
+      const bills = await listBillsForVendor(vendorId);
+      const hasPoInList = bills.some((b) => b.purchaseorder_ids?.length || b.purchaseorder_id);
+      let fullBills = bills;
+      if (!hasPoInList && bills.length > 0) {
+        const settled = await Promise.allSettled(bills.map((b) => getBill(b.bill_id)));
+        fullBills = settled.filter((r) => r.status === "fulfilled" && r.value).map((r) => r.value);
+      }
+
+      const map = {};
+      const addBill = (pid, bill) => {
+        if (!map[pid]) map[pid] = [];
+        if (!map[pid].some((b) => b.bill_id === bill.bill_id)) map[pid].push(bill);
+      };
+
+      fullBills.forEach((bill) => {
+        const pids = Array.isArray(bill.purchaseorder_ids)
+          ? bill.purchaseorder_ids
+          : bill.purchaseorder_id ? [bill.purchaseorder_id] : [];
+        pids.forEach((pid) => addBill(pid, bill));
+      });
+
+      const localMap = {};
+      const localBilledSet = getLocallyBilledPoIds(vendorId);
+      for (const pid of localBilledSet) {
+        const localBillIds = getLocalBillsForPo(vendorId, pid);
+        for (const bid of localBillIds) {
+          if (map[pid]?.some((b) => b.bill_id === bid)) continue;
+          let bill = fullBills.find((b) => b.bill_id === bid);
+          if (!bill) {
+            try { bill = await getBill(bid); } catch { continue; }
+          }
+          if (bill) addBill(pid, bill);
+        }
+        localMap[pid] = true;
+      }
+
+      setBillsByPo(map);
+    } catch (err) {
+      console.warn("Failed to build po->bills map:", err.message);
+    }
+  };
 
   const loadPOs = async (vendorId) => {
     const vid = vendorId || vendor?.booksVendorId;
@@ -101,6 +147,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
       const p = await listPurchaseOrders(vid);
       setPos(p);
       setLocallyBilled(getLocallyBilledPoIds(vid));
+      loadBillsByPo(vid);
     } catch (err) {
       setSnackbar({ open: true, message: "Failed to refresh purchase orders.", severity: "error" });
     } finally {
@@ -154,8 +201,15 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
     setBillsAnchor(event.currentTarget);
     setBillsLoading(true);
     try {
+      const cached = billsByPo[poId] || [];
+      if (cached.length > 0) {
+        setBillsList(cached);
+        return;
+      }
+
       const po = await getPurchaseOrder(poId);
       let bills = po.bills || [];
+
       if (bills.length === 0) {
         const localBillIds = getLocalBillsForPo(vendor?.booksVendorId, poId);
         if (localBillIds.length > 0) {
@@ -165,6 +219,22 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
             .map((r) => r.value);
         }
       }
+
+      if (bills.length === 0 && vendor?.booksVendorId) {
+        const allBills = await listBillsForVendor(vendor.booksVendorId);
+        const settled = await Promise.allSettled(allBills.map((b) => getBill(b.bill_id)));
+        const full = settled.filter((r) => r.status === "fulfilled" && r.value).map((r) => r.value);
+        bills = full.filter((b) => {
+          const pids = Array.isArray(b.purchaseorder_ids)
+            ? b.purchaseorder_ids
+            : b.purchaseorder_id ? [b.purchaseorder_id] : [];
+          return pids.includes(poId);
+        });
+        if (bills.length > 0) {
+          setBillsByPo((prev) => ({ ...prev, [poId]: bills }));
+        }
+      }
+
       setBillsList(bills);
     } catch {
       setBillsList([]);
@@ -284,7 +354,8 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
               </TableHead>
               <TableBody>
                 {pos.map((p) => {
-                  const isBilled = BILLED_STATUSES.has(p.status) || locallyBilled.has(p.purchaseorder_id);
+                  const hasServerBills = (billsByPo[p.purchaseorder_id] || []).length > 0;
+                  const isBilled = BILLED_STATUSES.has(p.status) || locallyBilled.has(p.purchaseorder_id) || hasServerBills;
                   const displayStatus = isBilled ? "billed" : p.status;
                   return (
                     <TableRow key={p.purchaseorder_id} hover sx={{ "&:hover": { bgcolor: "surface.hover" } }}>

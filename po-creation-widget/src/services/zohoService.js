@@ -218,6 +218,11 @@ export async function getBill(billId) {
   return data.bill || data;
 }
 
+export async function listBillsForVendor(vendorId) {
+  const data = await booksApi("GET", `/bills?vendor_id=${vendorId}`);
+  return data.bills || [];
+}
+
 /* ========== Bills (for Convert to Bill) ========== */
 
 export async function createBill(payload, status = "draft") {
