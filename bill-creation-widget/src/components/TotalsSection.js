@@ -5,7 +5,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 export default function TotalsSection({
   lineItems, taxes, discountValue, setDiscountValue,
   discountType, setDiscountType, adjustmentValue, setAdjustmentValue,
-  isInclusiveTax, isItemLevelTax,
+  isInclusiveTax, isItemLevelTax, accounts, discountAccountId, setDiscountAccountId,
 }) {
   const subTotal = lineItems.reduce((s, r) => s + (parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0), 0);
   const discNum = parseFloat(discountValue) || 0;
@@ -24,11 +24,11 @@ export default function TotalsSection({
   const total = isInclusiveTax ? subTotal - discountAmt + adj : subTotal - discountAmt + taxTotal + adj;
 
   return (
-    <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
-      <Box sx={{ width: 380, border: "1px solid #e0e0e0", borderRadius: 2, p: 2, bgcolor: "#fafbfc" }}>
+    <Box sx={{ width: "100%" }}>
+      <Box sx={{ width: "100%", border: 1, borderColor: "divider", borderRadius: 2, p: 2, bgcolor: "surface.alt" }}>
         <Row label="Sub Total" value={subTotal.toFixed(2)} bold />
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, my: 1 }}>
-          <Typography variant="body2" sx={{ width: 100, textAlign: "right", color: "#5f6368" }}>Discount</Typography>
+          <Typography variant="body2" sx={{ width: 100, textAlign: "right", color: "text.secondary" }}>Discount</Typography>
           <TextField type="number" size="small" value={discountValue}
             onChange={(e) => setDiscountValue(e.target.value)}
             inputProps={{ min: 0, step: "0.01" }} sx={{ width: 80 }} />
@@ -39,11 +39,25 @@ export default function TotalsSection({
           </TextField>
           <Typography variant="body2" sx={{ flex: 1, textAlign: "right", fontWeight: 500 }}>{discountAmt.toFixed(2)}</Typography>
         </Box>
+        {discNum > 0 && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+            <Typography variant="body2" sx={{ width: 100, textAlign: "right", color: "text.secondary" }}>Discount A/c</Typography>
+            <TextField select size="small" value={discountAccountId || ""}
+              onChange={(e) => setDiscountAccountId(e.target.value)}
+              sx={{ flex: 1 }} error={discNum > 0 && !discountAccountId}
+              helperText={discNum > 0 && !discountAccountId ? "Required when discount is applied" : ""}>
+              <MenuItem value="">-- Select --</MenuItem>
+              {(accounts || []).map((a) => (
+                <MenuItem key={a.account_id} value={a.account_id}>{a.account_name}</MenuItem>
+              ))}
+            </TextField>
+          </Box>
+        )}
         {!isInclusiveTax && taxTotal > 0 && <Row label="Tax" value={taxTotal.toFixed(2)} />}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, my: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", width: 100, justifyContent: "flex-end", gap: 0.3 }}>
-            <Typography variant="body2" color="#5f6368">Adjustment</Typography>
-            <Tooltip title="Can be +/-" arrow><InfoOutlinedIcon sx={{ fontSize: 14, color: "#999" }} /></Tooltip>
+            <Typography variant="body2" color="text.secondary">Adjustment</Typography>
+            <Tooltip title="Can be +/-" arrow><InfoOutlinedIcon sx={{ fontSize: 14, color: "text.secondary" }} /></Tooltip>
           </Box>
           <TextField type="number" size="small" value={adjustmentValue}
             onChange={(e) => setAdjustmentValue(e.target.value)}
@@ -60,8 +74,8 @@ export default function TotalsSection({
 function Row({ label, value, bold, large }) {
   return (
     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", my: 0.5 }}>
-      <Typography variant="body2" sx={{ fontWeight: bold ? 700 : 400, fontSize: large ? 16 : 13, color: "#333" }}>{label}</Typography>
-      <Typography variant="body2" sx={{ fontWeight: bold ? 700 : 500, fontSize: large ? 16 : 13, color: "#333" }}>{value}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: bold ? 700 : 400, fontSize: large ? 16 : 13, color: "text.primary" }}>{label}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: bold ? 700 : 500, fontSize: large ? 16 : 13, color: "text.primary" }}>{value}</Typography>
     </Box>
   );
 }

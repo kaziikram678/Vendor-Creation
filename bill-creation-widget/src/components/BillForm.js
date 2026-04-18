@@ -2,15 +2,17 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Box, Grid, TextField, MenuItem, Typography, Button, Alert, CircularProgress,
   Snackbar, Paper, IconButton, ButtonGroup, Popper, Grow, ClickAwayListener,
-  MenuList,
+  MenuList, Stepper, Step, StepLabel,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import SaveIcon from "@mui/icons-material/Save";
 import dayjs from "dayjs";
 
 import LineItemTable, { createEmptyRow } from "./LineItemTable";
 import TotalsSection from "./TotalsSection";
+import CustomFieldsSection, { customFieldsToPayload, customFieldsFromRecord } from "./CustomFieldsSection";
 import { getBill, createBill, updateBill, submitBillForApproval, approveBill } from "../services/zohoService";
 
 const PAYMENT_TERMS = [
@@ -18,12 +20,17 @@ const PAYMENT_TERMS = [
   { value: 30, label: "Net 30" }, { value: 45, label: "Net 45" }, { value: 60, label: "Net 60" },
 ];
 
-export default function BillForm({ vendor, items, taxes, accounts, editBillId, onBack }) {
+const STEPS = ["Basic Info", "Items", "Totals & Notes"];
+
+export default function BillForm({
+  vendor, items, taxes, accounts, editBillId, onBack, customFieldsMeta = [],
+}) {
   const isEdit = !!editBillId;
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [step, setStep] = useState(0);
 
   const [billNumber, setBillNumber] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
@@ -37,15 +44,18 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
   const [lineItems, setLineItems] = useState([createEmptyRow()]);
   const [discountValue, setDiscountValue] = useState("0");
   const [discountType, setDiscountType] = useState("percent");
+  const [discountAccountId, setDiscountAccountId] = useState("");
   const [adjustmentValue, setAdjustmentValue] = useState("0");
+  const [customValues, setCustomValues] = useState({});
+  const [editStatus, setEditStatus] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
 
-  // Load existing bill for edit mode
   const loadBill = useCallback(async () => {
     if (!editBillId) return;
     try {
       setLoading(true);
       const bill = await getBill(editBillId);
+      setEditStatus(bill.status || "");
       setBillNumber(bill.bill_number || "");
       setOrderNumber(bill.reference_number || "");
       setBillDate(bill.date || dayjs().format("YYYY-MM-DD"));
@@ -56,6 +66,15 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
       setTaxLevel(bill.is_item_level_tax_calc ? "true" : "false");
       setNotes(bill.notes || "");
       setAdjustmentValue(String(bill.adjustment || 0));
+
+      const disc = bill.discount || 0;
+      const discStr = String(disc).replace("%", "");
+      setDiscountValue(discStr === "0" ? "0" : discStr);
+      if (String(disc).includes("%")) setDiscountType("percent");
+      else if (disc && !String(disc).includes("%")) setDiscountType("amount");
+      setDiscountAccountId(bill.discount_account_id || "");
+
+      setCustomValues(customFieldsFromRecord(customFieldsMeta, bill));
 
       if (bill.line_items?.length) {
         setLineItems(bill.line_items.map((li) => ({
@@ -69,7 +88,7 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
     } finally {
       setLoading(false);
     }
-  }, [editBillId]);
+  }, [editBillId, customFieldsMeta]);
 
   useEffect(() => { loadBill(); }, [loadBill]);
 
@@ -86,18 +105,33 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
     setPaymentTermsLabel(f ? f.label : `Net ${n}`);
   };
 
-  const validate = () => {
+  const validateStep = (s) => {
     const e = {};
-    if (!billNumber.trim()) e.billNumber = "Bill number is required.";
-    if (!billDate) e.billDate = "Bill date is required.";
-    if (!lineItems.some((r) => r.item_id && parseFloat(r.quantity) > 0 && parseFloat(r.rate) > 0))
-      e.lineItems = "At least one valid line item is required.";
+    if (s === 0) {
+      if (!billNumber.trim()) e.billNumber = "Bill number is required.";
+      if (!billDate) e.billDate = "Bill date is required.";
+      if (dueDate && dayjs(dueDate).isBefore(dayjs(billDate)))
+        e.dueDate = "Due date cannot be before bill date.";
+    }
+    if (s === 1) {
+      if (!lineItems.some((r) => r.item_id && parseFloat(r.quantity) > 0 && parseFloat(r.rate) > 0))
+        e.lineItems = "At least one valid line item is required.";
+    }
+    if (s === 2) {
+      if ((parseFloat(discountValue) || 0) > 0 && !discountAccountId)
+        e.discountAccount = "Please select a discount account.";
+    }
     setValidationErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = async (status) => {
-    if (!validate()) return;
+  const handleNext = () => { if (validateStep(step)) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
+  const handleBackStep = () => setStep((s) => Math.max(s - 1, 0));
+
+  const handleSubmit = async (action) => {
+    for (let i = 0; i <= 2; i++) {
+      if (!validateStep(i)) { setStep(i); return; }
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -121,27 +155,38 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
         })),
       };
 
+      const cfPayload = customFieldsToPayload(customFieldsMeta, customValues);
+      if (cfPayload.length) payload.custom_fields = cfPayload;
+
       const discNum = parseFloat(discountValue) || 0;
-      if (discNum > 0) payload.discount = discountType === "percent" ? `${discNum}%` : discNum;
+      if (discNum > 0) {
+        payload.discount = discountType === "percent" ? `${discNum}%` : discNum;
+        if (discountAccountId) payload.discount_account_id = discountAccountId;
+      }
       const adj = parseFloat(adjustmentValue) || 0;
       if (adj !== 0) { payload.adjustment = adj; payload.adjustment_description = adj > 0 ? "Adjustment (add)" : "Adjustment (deduct)"; }
 
       if (isEdit) {
         await updateBill(editBillId, payload);
-        setSnackbar({ open: true, message: "Bill updated successfully!", severity: "success" });
-      } else if (status === "submit") {
+        if (action === "submit" && editStatus === "draft") {
+          await submitBillForApproval(editBillId);
+          setSnackbar({ open: true, message: "Bill updated and submitted for approval!", severity: "success" });
+        } else {
+          setSnackbar({ open: true, message: "Bill updated successfully!", severity: "success" });
+        }
+      } else if (action === "submit") {
         const bill = await createBill(payload, "draft");
         await submitBillForApproval(bill.bill_id);
         setSnackbar({ open: true, message: "Bill submitted for approval!", severity: "success" });
-      } else if (status === "approve") {
+      } else if (action === "approve") {
         const bill = await createBill(payload, "draft");
         await approveBill(bill.bill_id);
         setSnackbar({ open: true, message: "Bill created and approved!", severity: "success" });
       } else {
-        await createBill(payload, status);
+        await createBill(payload, action || "draft");
         setSnackbar({ open: true, message: "Bill created successfully!", severity: "success" });
       }
-      setTimeout(() => onBack(), 1500);
+      setTimeout(() => onBack(), 1200);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -154,71 +199,108 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
   }
 
   return (
-    <Box>
-      {/* Title bar */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 3 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
         <IconButton onClick={onBack} size="small"><ArrowBackIcon /></IconButton>
         <Typography variant="h6" fontWeight={700}>{isEdit ? "Edit Bill" : "New Bill"}</Typography>
       </Box>
 
+      <Paper elevation={0} sx={{ p: 2, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
+        <Stepper activeStep={step} alternativeLabel>
+          {STEPS.map((l) => (<Step key={l}><StepLabel>{l}</StepLabel></Step>))}
+        </Stepper>
+      </Paper>
+
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-      <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Bill#" required value={billNumber} onChange={(e) => setBillNumber(e.target.value)}
-              fullWidth size="small" error={!!validationErrors.billNumber} helperText={validationErrors.billNumber} />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Order Number" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} fullWidth size="small" />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Payment Terms" select value={paymentTerms} onChange={(e) => handlePaymentTermsChange(e.target.value)} fullWidth size="small">
-              {PAYMENT_TERMS.map((pt) => <MenuItem key={pt.value} value={pt.value}>{pt.label}</MenuItem>)}
-            </TextField>
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Bill Date" type="date" required value={billDate} onChange={(e) => setBillDate(e.target.value)}
-              fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!validationErrors.billDate} helperText={validationErrors.billDate} />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Due Date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-              fullWidth size="small" InputLabelProps={{ shrink: true }} inputProps={{ min: billDate }} />
-          </Grid>
-          <Grid item xs={6} sm={2}>
-            <TextField select label="Tax Type" value={taxType} onChange={(e) => setTaxType(e.target.value)} fullWidth size="small">
-              <MenuItem value="false">Exclusive</MenuItem><MenuItem value="true">Inclusive</MenuItem>
-            </TextField>
-          </Grid>
-          <Grid item xs={6} sm={2}>
-            <TextField select label="Tax Level" value={taxLevel} onChange={(e) => setTaxLevel(e.target.value)} fullWidth size="small">
-              <MenuItem value="true">Item Level</MenuItem><MenuItem value="false">Transaction</MenuItem>
-            </TextField>
-          </Grid>
-        </Grid>
-      </Paper>
+      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", pr: 0.5 }}>
+        {step === 0 && (
+          <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Bill#" required value={billNumber} onChange={(e) => setBillNumber(e.target.value)}
+                  fullWidth size="small" error={!!validationErrors.billNumber} helperText={validationErrors.billNumber} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Order Number" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} fullWidth size="small" />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Payment Terms" select value={paymentTerms} onChange={(e) => handlePaymentTermsChange(e.target.value)} fullWidth size="small">
+                  {PAYMENT_TERMS.map((pt) => <MenuItem key={pt.value} value={pt.value}>{pt.label}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Bill Date" type="date" required value={billDate} onChange={(e) => setBillDate(e.target.value)}
+                  fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!validationErrors.billDate} helperText={validationErrors.billDate} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Due Date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                  fullWidth size="small" InputLabelProps={{ shrink: true }} inputProps={{ min: billDate }}
+                  error={!!validationErrors.dueDate} helperText={validationErrors.dueDate} />
+              </Grid>
+              <Grid size={{ xs: 6, sm: 2 }}>
+                <TextField select label="Tax Type" value={taxType} onChange={(e) => setTaxType(e.target.value)} fullWidth size="small">
+                  <MenuItem value="false">Exclusive</MenuItem><MenuItem value="true">Inclusive</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 2 }}>
+                <TextField select label="Tax Level" value={taxLevel} onChange={(e) => setTaxLevel(e.target.value)} fullWidth size="small">
+                  <MenuItem value="true">Item Level</MenuItem><MenuItem value="false">Transaction</MenuItem>
+                </TextField>
+              </Grid>
+            </Grid>
+          </Paper>
+        )}
 
-      {validationErrors.lineItems && <Alert severity="error" sx={{ mb: 1 }}>{validationErrors.lineItems}</Alert>}
-      <LineItemTable lineItems={lineItems} setLineItems={setLineItems} items={items} taxes={taxes} accounts={accounts} />
+        {step === 1 && (
+          <>
+            {validationErrors.lineItems && <Alert severity="error" sx={{ mb: 1 }}>{validationErrors.lineItems}</Alert>}
+            <LineItemTable lineItems={lineItems} setLineItems={setLineItems} items={items} taxes={taxes} accounts={accounts} />
+          </>
+        )}
 
-      <TotalsSection lineItems={lineItems} taxes={taxes} discountValue={discountValue} setDiscountValue={setDiscountValue}
-        discountType={discountType} setDiscountType={setDiscountType} adjustmentValue={adjustmentValue}
-        setAdjustmentValue={setAdjustmentValue} isInclusiveTax={taxType === "true"} isItemLevelTax={taxLevel === "true"} />
+        {step === 2 && (
+          <>
+            <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
+              <Grid container spacing={2.5}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField label="Notes" multiline minRows={7} value={notes} onChange={(e) => setNotes(e.target.value)}
+                    fullWidth size="small" placeholder="Notes (not shown in PDF)" />
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TotalsSection lineItems={lineItems} taxes={taxes}
+                    discountValue={discountValue} setDiscountValue={setDiscountValue}
+                    discountType={discountType} setDiscountType={setDiscountType}
+                    adjustmentValue={adjustmentValue} setAdjustmentValue={setAdjustmentValue}
+                    isInclusiveTax={taxType === "true"} isItemLevelTax={taxLevel === "true"}
+                    accounts={accounts} discountAccountId={discountAccountId} setDiscountAccountId={setDiscountAccountId} />
+                </Grid>
+              </Grid>
+            </Paper>
 
-      <Paper elevation={0} sx={{ p: 2, mb: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
-        <TextField label="Notes" multiline rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
-          fullWidth size="small" placeholder="Notes (not shown in PDF)" />
-      </Paper>
+            <CustomFieldsSection customFields={customFieldsMeta} values={customValues} setValues={setCustomValues} />
+          </>
+        )}
+      </Box>
 
-      {isEdit ? (
-        <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end", mb: 4 }}>
-          <Button variant="outlined" onClick={onBack} disabled={submitting}>Cancel</Button>
-          <Button variant="contained" startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-            onClick={() => handleSubmit()} disabled={submitting}>{submitting ? "Saving..." : "Update Bill"}</Button>
+      <Box sx={{ display: "flex", gap: 1.5, justifyContent: "space-between", pt: 2, borderTop: 1, borderColor: "divider", bgcolor: "background.paper" }}>
+        <Button variant="outlined" onClick={onBack} disabled={submitting}>Cancel</Button>
+        <Box sx={{ display: "flex", gap: 1.5 }}>
+          {step > 0 && (
+            <Button variant="outlined" onClick={handleBackStep} startIcon={<ArrowBackIcon />} disabled={submitting}>Back</Button>
+          )}
+          {step < STEPS.length - 1 && (
+            <Button variant="contained" onClick={handleNext} endIcon={<ArrowForwardIcon />} disabled={submitting}>Next</Button>
+          )}
+          {step === STEPS.length - 1 && (
+            isEdit ? (
+              <EditBillActions submitting={submitting} onSubmit={handleSubmit} canSubmitForApproval={editStatus === "draft"} />
+            ) : (
+              <CreateBillActions submitting={submitting} onSubmit={handleSubmit} />
+            )
+          )}
         </Box>
-      ) : (
-        <CreateBillActions submitting={submitting} onCancel={onBack} onSubmit={handleSubmit} />
-      )}
+      </Box>
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((s) => ({ ...s, open: false }))} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
         <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>{snackbar.message}</Alert>
@@ -227,7 +309,7 @@ export default function BillForm({ vendor, items, taxes, accounts, editBillId, o
   );
 }
 
-function CreateBillActions({ submitting, onCancel, onSubmit }) {
+function CreateBillActions({ submitting, onSubmit }) {
   const [open, setOpen] = React.useState(false);
   const anchorRef = React.useRef(null);
   const options = [
@@ -237,12 +319,10 @@ function CreateBillActions({ submitting, onCancel, onSubmit }) {
   const [selectedIdx, setSelectedIdx] = React.useState(0);
 
   return (
-    <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end", mb: 4 }}>
-      <Button variant="outlined" onClick={onCancel} disabled={submitting}>Cancel</Button>
-      <Button variant="contained"
+    <>
+      <Button variant="outlined"
         startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-        onClick={() => onSubmit("draft")} disabled={submitting}
-        sx={{ bgcolor: "#fff", color: "#1565c0", border: "1px solid #1565c0", "&:hover": { bgcolor: "#e3f2fd" } }}>
+        onClick={() => onSubmit("draft")} disabled={submitting}>
         {submitting ? "Saving..." : "Save as Draft"}
       </Button>
       <ButtonGroup variant="contained" color="primary" ref={anchorRef} disabled={submitting}>
@@ -273,6 +353,25 @@ function CreateBillActions({ submitting, onCancel, onSubmit }) {
           </Grow>
         )}
       </Popper>
-    </Box>
+    </>
+  );
+}
+
+function EditBillActions({ submitting, onSubmit, canSubmitForApproval }) {
+  return (
+    <>
+      <Button variant="outlined"
+        startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+        onClick={() => onSubmit("update")} disabled={submitting}>
+        {submitting ? "Saving..." : "Update Bill"}
+      </Button>
+      {canSubmitForApproval && (
+        <Button variant="contained" color="primary"
+          startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+          onClick={() => onSubmit("submit")} disabled={submitting}>
+          {submitting ? "Saving..." : "Submit for Approval"}
+        </Button>
+      )}
+    </>
   );
 }

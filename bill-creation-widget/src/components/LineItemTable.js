@@ -30,26 +30,26 @@ export default function LineItemTable({ lineItems, setLineItems, items, taxes, a
   const amt = (r) => ((parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0)).toFixed(2);
 
   return (
-    <Box sx={{ border: "1px solid #e0e0e0", borderRadius: 2, overflow: "hidden", mb: 2 }}>
-      <Box sx={{ px: 2, py: 1.5, bgcolor: "#f8f9fb", borderBottom: "1px solid #e0e0e0" }}>
+    <Box sx={{ border: 1, borderColor: "divider", borderRadius: 2, overflow: "hidden", mb: 2, width: "100%" }}>
+      <Box sx={{ px: 2, py: 1.5, bgcolor: "surface.main", borderBottom: 1, borderColor: "divider" }}>
         <Typography variant="subtitle2" fontWeight={700} color="text.secondary">ITEM TABLE</Typography>
       </Box>
-      <TableContainer>
-        <Table size="small">
+      <TableContainer sx={{ width: "100%" }}>
+        <Table size="small" sx={{ tableLayout: "fixed", width: "100%" }}>
           <TableHead>
-            <TableRow sx={{ bgcolor: "#fafbfc" }}>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 220 }}>ITEM DETAILS</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 150 }}>ACCOUNT</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 110 }}>QUANTITY</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 110 }}>RATE</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", minWidth: 140 }}>TAX</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "#5f6368", width: 100 }} align="right">AMOUNT</TableCell>
+            <TableRow sx={{ bgcolor: "surface.alt" }}>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "text.secondary", width: "28%" }}>ITEM DETAILS</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "text.secondary", width: "18%" }}>ACCOUNT</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "text.secondary", width: 80 }}>QUANTITY</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "text.secondary", width: 90 }}>RATE</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "text.secondary", width: "15%" }}>TAX</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 11, color: "text.secondary", width: 90 }} align="right">AMOUNT</TableCell>
               <TableCell sx={{ width: 40 }} />
             </TableRow>
           </TableHead>
           <TableBody>
             {lineItems.map((row, idx) => (
-              <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#f5f7ff" }, verticalAlign: "top" }}>
+              <TableRow key={idx} sx={{ "&:hover": { bgcolor: "surface.hover" }, verticalAlign: "top" }}>
                 <TableCell>
                   <Autocomplete size="small" options={items} getOptionLabel={(o) => o.name || ""}
                     value={items.find((i) => i.item_id === row.item_id) || null}
@@ -67,7 +67,7 @@ export default function LineItemTable({ lineItems, setLineItems, items, taxes, a
                     minRows={1}
                     maxRows={3}
                     variant="standard"
-                    sx={{ mt: 0.5, "& .MuiInput-root": { fontSize: 12, color: "#888" } }}
+                    sx={{ mt: 0.5, "& .MuiInput-root": { fontSize: 12, color: "text.secondary" } }}
                     InputProps={{ disableUnderline: true }}
                   />
                 </TableCell>

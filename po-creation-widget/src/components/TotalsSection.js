@@ -1,121 +1,84 @@
 import React from "react";
-import { Box, TextField, MenuItem, Typography, Tooltip, Paper } from "@mui/material";
+import { Box, TextField, MenuItem, Typography, Tooltip, Divider } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
 export default function TotalsSection({
-  lineItems,
-  taxes,
-  discountValue,
-  setDiscountValue,
-  discountType,
-  setDiscountType,
-  adjustmentValue,
-  setAdjustmentValue,
-  isInclusiveTax,
-  isItemLevelTax,
+  lineItems, taxes, discountValue, setDiscountValue,
+  discountType, setDiscountType, adjustmentValue, setAdjustmentValue,
+  isInclusiveTax, isItemLevelTax, accounts, discountAccountId, setDiscountAccountId,
+  readOnly,
 }) {
-  const subTotal = lineItems.reduce((sum, row) => {
-    const qty = parseFloat(row.quantity) || 0;
-    const rate = parseFloat(row.rate) || 0;
-    return sum + qty * rate;
-  }, 0);
-
-  const discountNum = parseFloat(discountValue) || 0;
-  const discountAmt = discountType === "percent"
-    ? (subTotal * discountNum) / 100
-    : discountNum;
+  const subTotal = lineItems.reduce((s, r) => s + (parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0), 0);
+  const discNum = parseFloat(discountValue) || 0;
+  const discountAmt = discountType === "percent" ? (subTotal * discNum) / 100 : discNum;
 
   let taxTotal = 0;
-  lineItems.forEach((row) => {
-    if (!row.tax_id) return;
-    const tax = taxes.find((t) => t.tax_id === row.tax_id);
-    if (!tax) return;
-    const qty = parseFloat(row.quantity) || 0;
-    const rate = parseFloat(row.rate) || 0;
-    const lineAmount = qty * rate;
-    if (isInclusiveTax) {
-      taxTotal += lineAmount - lineAmount / (1 + tax.tax_percentage / 100);
-    } else {
-      taxTotal += (lineAmount * tax.tax_percentage) / 100;
-    }
+  lineItems.forEach((r) => {
+    if (!r.tax_id) return;
+    const t = taxes.find((tx) => tx.tax_id === r.tax_id);
+    if (!t) return;
+    const la = (parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0);
+    taxTotal += isInclusiveTax ? la - la / (1 + t.tax_percentage / 100) : (la * t.tax_percentage) / 100;
   });
 
-  const afterDiscount = subTotal - discountAmt;
-  const adjustment = parseFloat(adjustmentValue) || 0;
-  const grandTotal = isInclusiveTax
-    ? afterDiscount + adjustment
-    : afterDiscount + taxTotal + adjustment;
+  const adj = parseFloat(adjustmentValue) || 0;
+  const total = isInclusiveTax ? subTotal - discountAmt + adj : subTotal - discountAmt + taxTotal + adj;
 
   return (
-    <Paper variant="outlined" sx={{ mt: 2, mb: 2, p: 2 }}>
-      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1.5 }}>
-        <Row label="Sub Total" value={subTotal.toFixed(2)} />
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="body2" sx={{ width: 120, textAlign: "right" }}>Discount</Typography>
-          <TextField
-            type="number"
-            size="small"
-            value={discountValue}
+    <Box sx={{ width: "100%" }}>
+      <Box sx={{ width: "100%", border: 1, borderColor: "divider", borderRadius: 2, p: 2, bgcolor: "surface.alt" }}>
+        <Row label="Sub Total" value={subTotal.toFixed(2)} bold />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, my: 1 }}>
+          <Typography variant="body2" sx={{ width: 100, textAlign: "right", color: "text.secondary" }}>Discount</Typography>
+          <TextField type="number" size="small" value={discountValue}
             onChange={(e) => setDiscountValue(e.target.value)}
-            inputProps={{ min: 0, step: "0.01" }}
-            sx={{ width: 100 }}
-          />
-          <TextField
-            select
-            size="small"
-            value={discountType}
-            onChange={(e) => setDiscountType(e.target.value)}
-            sx={{ width: 90 }}
-          >
+            inputProps={{ min: 0, step: "0.01", readOnly }} sx={{ width: 80 }} />
+          <TextField select size="small" value={discountType}
+            onChange={(e) => setDiscountType(e.target.value)} sx={{ width: 80 }}
+            disabled={readOnly}>
             <MenuItem value="percent">%</MenuItem>
-            <MenuItem value="amount">Amount</MenuItem>
+            <MenuItem value="amount">Amt</MenuItem>
           </TextField>
-          <Typography variant="body2" sx={{ width: 100, textAlign: "right", fontWeight: 500 }}>
-            {discountAmt.toFixed(2)}
-          </Typography>
+          <Typography variant="body2" sx={{ flex: 1, textAlign: "right", fontWeight: 500 }}>{discountAmt.toFixed(2)}</Typography>
         </Box>
-
-        {!isInclusiveTax && taxTotal > 0 && (
-          <Row label="Tax" value={taxTotal.toFixed(2)} />
-        )}
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Box sx={{ display: "flex", alignItems: "center", width: 120, justifyContent: "flex-end", gap: 0.5 }}>
-            <Typography variant="body2">Adjustment</Typography>
-            <Tooltip title="Adjustments can be positive or negative" arrow>
-              <InfoOutlinedIcon sx={{ fontSize: 16, color: "#888" }} />
-            </Tooltip>
+        {discNum > 0 && setDiscountAccountId && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+            <Typography variant="body2" sx={{ width: 100, textAlign: "right", color: "text.secondary" }}>Discount A/c</Typography>
+            <TextField select size="small" value={discountAccountId || ""}
+              onChange={(e) => setDiscountAccountId(e.target.value)}
+              sx={{ flex: 1 }} error={discNum > 0 && !discountAccountId}
+              helperText={discNum > 0 && !discountAccountId ? "Required when discount is applied" : ""}
+              disabled={readOnly}>
+              <MenuItem value="">-- Select --</MenuItem>
+              {(accounts || []).map((a) => (
+                <MenuItem key={a.account_id} value={a.account_id}>{a.account_name}</MenuItem>
+              ))}
+            </TextField>
           </Box>
-          <TextField
-            type="number"
-            size="small"
-            value={adjustmentValue}
+        )}
+        {!isInclusiveTax && taxTotal > 0 && <Row label="Tax" value={taxTotal.toFixed(2)} />}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, my: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", width: 100, justifyContent: "flex-end", gap: 0.3 }}>
+            <Typography variant="body2" color="text.secondary">Adjustment</Typography>
+            <Tooltip title="Can be +/-" arrow><InfoOutlinedIcon sx={{ fontSize: 14, color: "text.secondary" }} /></Tooltip>
+          </Box>
+          <TextField type="number" size="small" value={adjustmentValue}
             onChange={(e) => setAdjustmentValue(e.target.value)}
-            inputProps={{ step: "0.01" }}
-            sx={{ width: 100 }}
-          />
-          <Typography variant="body2" sx={{ width: 100, textAlign: "right", fontWeight: 500 }}>
-            {adjustment.toFixed(2)}
-          </Typography>
+            inputProps={{ step: "0.01", readOnly }} sx={{ width: 80 }} />
+          <Typography variant="body2" sx={{ flex: 1, textAlign: "right", fontWeight: 500 }}>{adj.toFixed(2)}</Typography>
         </Box>
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, borderTop: "2px solid #333", pt: 1.5, mt: 0.5 }}>
-          <Typography variant="body1" sx={{ width: 120, textAlign: "right", fontWeight: 700 }}>Total</Typography>
-          <Typography variant="body1" sx={{ width: 210, textAlign: "right", fontWeight: 700, fontSize: "1.1rem" }}>
-            {grandTotal.toFixed(2)}
-          </Typography>
-        </Box>
+        <Divider sx={{ my: 1 }} />
+        <Row label="Total" value={total.toFixed(2)} bold large />
       </Box>
-    </Paper>
+    </Box>
   );
 }
 
-function Row({ label, value }) {
+function Row({ label, value, bold, large }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-      <Typography variant="body2" sx={{ width: 120, textAlign: "right" }}>{label}</Typography>
-      <Typography variant="body2" sx={{ width: 210, textAlign: "right", fontWeight: 500 }}>{value}</Typography>
+    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", my: 0.5 }}>
+      <Typography variant="body2" sx={{ fontWeight: bold ? 700 : 400, fontSize: large ? 16 : 13, color: "text.primary" }}>{label}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: bold ? 700 : 500, fontSize: large ? 16 : 13, color: "text.primary" }}>{value}</Typography>
     </Box>
   );
 }

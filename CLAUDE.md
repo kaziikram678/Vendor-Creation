@@ -31,6 +31,7 @@ Vendor_Creation/
       services/
         zohoService.js         # All Zoho CRM + Books API calls (POs, items, taxes, accounts, bills)
   createVendorInBooks.dg       # Deluge: syncs CRM Vendor -> Books contact (create/update)
+  updateVendorInCRM.dg         # Deluge: syncs Books contact -> CRM Vendor (reverse sync on update)
   createBillInBooks.dg         # Deluge: server-side bill creation in Books
 ```
 

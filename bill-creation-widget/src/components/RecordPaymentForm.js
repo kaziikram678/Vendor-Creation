@@ -139,21 +139,21 @@ export default function RecordPaymentForm({ billId, onBack }) {
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
       {/* Bill Summary */}
-      <Paper elevation={0} sx={{ p: 2, mb: 3, border: "1px solid #e0e0e0", borderRadius: 2, bgcolor: "#f8f9fb" }}>
+      <Paper elevation={0} sx={{ p: 2, mb: 3, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "surface.main" }}>
         <Grid container spacing={2}>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Typography variant="caption" color="text.secondary">Bill Number</Typography>
             <Typography fontWeight={600}>{bill?.bill_number}</Typography>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Typography variant="caption" color="text.secondary">Bill Date</Typography>
             <Typography>{bill?.date}</Typography>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Typography variant="caption" color="text.secondary">Bill Total</Typography>
             <Typography fontWeight={600}>{formatCurrency(bill?.total)}</Typography>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Typography variant="caption" color="text.secondary">Balance Due</Typography>
             <Typography fontWeight={700} color="error.main">{formatCurrency(balanceDue)}</Typography>
           </Grid>
@@ -163,9 +163,9 @@ export default function RecordPaymentForm({ billId, onBack }) {
       <Divider sx={{ mb: 3 }} />
 
       {/* Payment Amount */}
-      <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2 }}>
         <Grid container spacing={2.5}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               label="Payment Made *"
               type="number"
@@ -177,7 +177,7 @@ export default function RecordPaymentForm({ billId, onBack }) {
               helperText={validationErrors.amount}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               label="Bank Charges (if any)"
               type="number"
@@ -191,9 +191,9 @@ export default function RecordPaymentForm({ billId, onBack }) {
       </Paper>
 
       {/* Payment Details */}
-      <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2 }}>
         <Grid container spacing={2.5}>
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ xs: 12, sm: 4 }}>
             <TextField
               label="Payment Mode"
               select
@@ -204,7 +204,7 @@ export default function RecordPaymentForm({ billId, onBack }) {
               {PAYMENT_MODES.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}
             </TextField>
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ xs: 12, sm: 4 }}>
             <TextField
               label="Paid Through *"
               select
@@ -219,7 +219,7 @@ export default function RecordPaymentForm({ billId, onBack }) {
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ xs: 12, sm: 4 }}>
             <TextField
               label="Payment Date *"
               type="date"
@@ -231,7 +231,7 @@ export default function RecordPaymentForm({ billId, onBack }) {
               helperText={validationErrors.paymentDate}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               label="Payment #"
               value={paymentNumber}
@@ -239,7 +239,7 @@ export default function RecordPaymentForm({ billId, onBack }) {
               fullWidth
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               label="Reference #"
               value={referenceNumber}
@@ -251,7 +251,7 @@ export default function RecordPaymentForm({ billId, onBack }) {
       </Paper>
 
       {/* Notes */}
-      <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2 }}>
         <TextField
           label="Notes"
           multiline

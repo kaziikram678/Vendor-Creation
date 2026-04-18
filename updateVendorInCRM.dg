@@ -1,0 +1,95 @@
+// Zoho Books Webhook Handler: Sync Books Contact → CRM Vendor
+// Trigger: Set up a webhook in Zoho Books under Settings > Webhooks
+//          Event: Contact Updated | Module: Contact
+//          URL: point to a Zoho CRM custom function (REST API endpoint)
+//          Pass contact_id as parameter
+
+void automation.update_vendor_in_crm(String contact_id)
+{
+	booksOrgId = "771340721";
+
+	// 1. Fetch the updated contact from Zoho Books
+	booksResp = invokeurl
+	[
+		url :"https://www.zohoapis.com/books/v3/contacts/" + contact_id + "?organization_id=" + booksOrgId
+		type :GET
+		connection:"zoho_books_testing"
+	];
+
+	respCode = booksResp.get("code");
+	if(respCode != 0)
+	{
+		info "Failed to fetch contact from Books. Response: " + booksResp;
+		return;
+	}
+
+	contact = booksResp.get("contact");
+
+	// Only process vendor-type contacts
+	contactType = contact.get("contact_type");
+	if(contactType != "vendor")
+	{
+		info "Contact " + contact_id + " is not a vendor. Skipping.";
+		return;
+	}
+
+	// 2. Find the corresponding CRM Vendor
+	// First check the custom field cf_crm_vendor_id on the Books contact
+	crmVendorId = null;
+	customFields = ifnull(contact.get("custom_fields"), List());
+	for each cf in customFields
+	{
+		if(cf.get("api_name") == "cf_crm_vendor_id")
+		{
+			crmVendorId = cf.get("value");
+			break;
+		}
+	}
+
+	// If no CRM ID in custom field, search CRM by Books_Vendor_ID
+	if(crmVendorId == null || crmVendorId == "")
+	{
+		searchCriteria = "(Books_Vendor_ID:equals:" + contact_id + ")";
+		searchResults = zoho.crm.searchRecords("Vendors", searchCriteria);
+		if(searchResults.size() > 0)
+		{
+			crmVendorId = searchResults.get(0).get("id");
+		}
+		else
+		{
+			info "No matching CRM Vendor found for Books contact: " + contact_id;
+			return;
+		}
+	}
+
+	// 3. Extract fields from Books contact
+	contactName = ifnull(contact.get("contact_name"), "");
+	email = ifnull(contact.get("email"), "");
+	phone = ifnull(contact.get("phone"), "");
+	mobile = ifnull(contact.get("mobile"), "");
+
+	billingAddress = ifnull(contact.get("billing_address"), Map());
+	addrStreet = ifnull(billingAddress.get("street2"), "");
+	addrCity = ifnull(billingAddress.get("city"), "");
+	addrState = ifnull(billingAddress.get("state"), "");
+	addrCountry = ifnull(billingAddress.get("country"), "");
+
+	contactStatus = ifnull(contact.get("status"), "active");
+	isInactive = if(contactStatus == "inactive", true, false);
+
+	// 4. Build CRM update payload
+	crmUpdatePayload = Map();
+	crmUpdatePayload.put("Vendor_Name", contactName);
+	crmUpdatePayload.put("Email", email);
+	crmUpdatePayload.put("Work_Phone", phone);
+	crmUpdatePayload.put("Mobile", mobile);
+	crmUpdatePayload.put("Street", addrStreet);
+	crmUpdatePayload.put("City", addrCity);
+	crmUpdatePayload.put("State", addrState);
+	crmUpdatePayload.put("Country", addrCountry);
+	crmUpdatePayload.put("Inactive", isInactive);
+
+	// 5. Update the CRM Vendor record
+	updateResp = zoho.crm.updateRecord("Vendors", crmVendorId, crmUpdatePayload);
+	info "CRM Vendor " + crmVendorId + " updated. Response: " + updateResp;
+}

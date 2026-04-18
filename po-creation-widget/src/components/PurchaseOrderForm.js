@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Box, Grid, TextField, MenuItem, Typography, Button, Alert, CircularProgress,
-  Snackbar, Paper, IconButton,
+  Snackbar, Paper, IconButton, Stepper, Step, StepLabel, Chip,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import SaveIcon from "@mui/icons-material/Save";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import dayjs from "dayjs";
 
 import LineItemTable, { createEmptyRow } from "./LineItemTable";
 import TotalsSection from "./TotalsSection";
+import CustomFieldsSection, { customFieldsToPayload, customFieldsFromRecord } from "./CustomFieldsSection";
 import { getPurchaseOrder, createPurchaseOrder, updatePurchaseOrder } from "../services/zohoService";
 
 const PAYMENT_TERMS = [
@@ -16,12 +19,18 @@ const PAYMENT_TERMS = [
   { value: 30, label: "Net 30" }, { value: 45, label: "Net 45" }, { value: 60, label: "Net 60" },
 ];
 
-export default function PurchaseOrderForm({ vendor, items, taxes, accounts, editPoId, onBack }) {
+const STEPS = ["Basic Info", "Items", "Totals & Notes"];
+
+export default function PurchaseOrderForm({
+  vendor, items, taxes, accounts, editPoId, onBack, readOnly = false, customFieldsMeta = [],
+}) {
   const isEdit = !!editPoId;
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [step, setStep] = useState(0);
+  const [poStatus, setPoStatus] = useState("");
 
   const [poNumber, setPoNumber] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
@@ -37,7 +46,9 @@ export default function PurchaseOrderForm({ vendor, items, taxes, accounts, edit
   const [lineItems, setLineItems] = useState([createEmptyRow()]);
   const [discountValue, setDiscountValue] = useState("0");
   const [discountType, setDiscountType] = useState("percent");
+  const [discountAccountId, setDiscountAccountId] = useState("");
   const [adjustmentValue, setAdjustmentValue] = useState("0");
+  const [customValues, setCustomValues] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
 
   const loadPO = useCallback(async () => {
@@ -45,6 +56,7 @@ export default function PurchaseOrderForm({ vendor, items, taxes, accounts, edit
     try {
       setLoading(true);
       const po = await getPurchaseOrder(editPoId);
+      setPoStatus(po.status || "");
       setPoNumber(po.purchaseorder_number || "");
       setReferenceNumber(po.reference_number || "");
       setPoDate(po.date || dayjs().format("YYYY-MM-DD"));
@@ -53,9 +65,19 @@ export default function PurchaseOrderForm({ vendor, items, taxes, accounts, edit
       setPaymentTermsLabel(po.payment_terms_label || "Due on Receipt");
       setShipmentPreference(po.ship_via || "");
       setTaxType(po.is_inclusive_tax ? "true" : "false");
+      setTaxLevel(po.is_item_level_tax_calc ? "true" : "false");
       setNotes(po.notes || "");
       setTerms(po.terms || "");
       setAdjustmentValue(String(po.adjustment || 0));
+
+      const disc = po.discount || 0;
+      const discStr = String(disc).replace("%", "");
+      setDiscountValue(discStr === "0" ? "0" : discStr);
+      if (String(disc).includes("%")) setDiscountType("percent");
+      else if (disc && !String(disc).includes("%")) setDiscountType("amount");
+      setDiscountAccountId(po.discount_account_id || "");
+
+      setCustomValues(customFieldsFromRecord(customFieldsMeta, po));
 
       if (po.line_items?.length) {
         setLineItems(po.line_items.map((li) => ({
@@ -69,7 +91,7 @@ export default function PurchaseOrderForm({ vendor, items, taxes, accounts, edit
     } finally {
       setLoading(false);
     }
-  }, [editPoId]);
+  }, [editPoId, customFieldsMeta]);
 
   useEffect(() => { loadPO(); }, [loadPO]);
 
@@ -80,18 +102,33 @@ export default function PurchaseOrderForm({ vendor, items, taxes, accounts, edit
     setPaymentTermsLabel(f ? f.label : `Net ${n}`);
   };
 
-  const validate = () => {
+  const validateStep = (s) => {
     const e = {};
-    if (!poNumber.trim()) e.poNumber = "Purchase Order number is required.";
-    if (!poDate) e.poDate = "Date is required.";
-    if (!lineItems.some((r) => r.item_id && parseFloat(r.quantity) > 0 && parseFloat(r.rate) > 0))
-      e.lineItems = "At least one valid line item is required.";
+    if (s === 0) {
+      if (!poNumber.trim()) e.poNumber = "Purchase Order number is required.";
+      if (!poDate) e.poDate = "Date is required.";
+      if (deliveryDate && dayjs(deliveryDate).isBefore(dayjs(poDate)))
+        e.deliveryDate = "Delivery date cannot be before PO date.";
+    }
+    if (s === 1) {
+      if (!lineItems.some((r) => r.item_id && parseFloat(r.quantity) > 0 && parseFloat(r.rate) > 0))
+        e.lineItems = "At least one valid line item is required.";
+    }
+    if (s === 2) {
+      if ((parseFloat(discountValue) || 0) > 0 && !discountAccountId)
+        e.discountAccount = "Please select a discount account.";
+    }
     setValidationErrors(e);
     return Object.keys(e).length === 0;
   };
 
+  const handleNext = () => { if (validateStep(step)) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
+  const handleBack = () => setStep((s) => Math.max(s - 1, 0));
+
   const handleSubmit = async (status) => {
-    if (!validate()) return;
+    for (let i = 0; i <= 2; i++) {
+      if (!validateStep(i)) { setStep(i); return; }
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -116,8 +153,14 @@ export default function PurchaseOrderForm({ vendor, items, taxes, accounts, edit
         })),
       };
 
+      const cfPayload = customFieldsToPayload(customFieldsMeta, customValues);
+      if (cfPayload.length) payload.custom_fields = cfPayload;
+
       const discNum = parseFloat(discountValue) || 0;
-      if (discNum > 0) payload.discount = discountType === "percent" ? `${discNum}%` : discNum;
+      if (discNum > 0) {
+        payload.discount = discountType === "percent" ? `${discNum}%` : discNum;
+        if (discountAccountId) payload.discount_account_id = discountAccountId;
+      }
       const adj = parseFloat(adjustmentValue) || 0;
       if (adj !== 0) { payload.adjustment = adj; payload.adjustment_description = adj > 0 ? "Adjustment (add)" : "Adjustment (deduct)"; }
 
@@ -128,7 +171,7 @@ export default function PurchaseOrderForm({ vendor, items, taxes, accounts, edit
         await createPurchaseOrder(payload, status);
         setSnackbar({ open: true, message: "Purchase Order created!", severity: "success" });
       }
-      setTimeout(() => onBack(), 1500);
+      setTimeout(() => onBack(), 1200);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -140,85 +183,153 @@ export default function PurchaseOrderForm({ vendor, items, taxes, accounts, edit
     return <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}><CircularProgress /></Box>;
   }
 
+  const title = readOnly
+    ? `View Purchase Order${poNumber ? ` • ${poNumber}` : ""}`
+    : isEdit ? "Edit Purchase Order" : "New Purchase Order";
+
   return (
-    <Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 3 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
         <IconButton onClick={onBack} size="small"><ArrowBackIcon /></IconButton>
-        <Typography variant="h6" fontWeight={700}>{isEdit ? "Edit Purchase Order" : "New Purchase Order"}</Typography>
+        {readOnly && <VisibilityIcon color="primary" />}
+        <Typography variant="h6" fontWeight={700}>{title}</Typography>
+        {readOnly && poStatus && (
+          <Chip label={poStatus.replace(/_/g, " ")} size="small" color="success"
+            sx={{ ml: 1, fontWeight: 600, textTransform: "capitalize" }} />
+        )}
       </Box>
+
+      <Paper elevation={0} sx={{ p: 2, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
+        <Stepper activeStep={step} alternativeLabel>
+          {STEPS.map((l) => (<Step key={l}><StepLabel>{l}</StepLabel></Step>))}
+        </Stepper>
+      </Paper>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-      <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Purchase Order#" required value={poNumber} onChange={(e) => setPoNumber(e.target.value)}
-              fullWidth size="small" error={!!validationErrors.poNumber} helperText={validationErrors.poNumber} />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Reference#" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} fullWidth size="small" />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Shipment Preference" value={shipmentPreference} onChange={(e) => setShipmentPreference(e.target.value)}
-              fullWidth size="small" placeholder="e.g. FedEx, DHL" />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Date" type="date" required value={poDate} onChange={(e) => setPoDate(e.target.value)}
-              fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!validationErrors.poDate} helperText={validationErrors.poDate} />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Delivery Date" type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
-              fullWidth size="small" InputLabelProps={{ shrink: true }} />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="Payment Terms" select value={paymentTerms} onChange={(e) => handlePaymentTermsChange(e.target.value)} fullWidth size="small">
-              {PAYMENT_TERMS.map((pt) => <MenuItem key={pt.value} value={pt.value}>{pt.label}</MenuItem>)}
-            </TextField>
-          </Grid>
-          <Grid item xs={6} sm={2}>
-            <TextField select label="Tax Type" value={taxType} onChange={(e) => setTaxType(e.target.value)} fullWidth size="small">
-              <MenuItem value="false">Exclusive</MenuItem><MenuItem value="true">Inclusive</MenuItem>
-            </TextField>
-          </Grid>
-          <Grid item xs={6} sm={2}>
-            <TextField select label="Tax Level" value={taxLevel} onChange={(e) => setTaxLevel(e.target.value)} fullWidth size="small">
-              <MenuItem value="true">Item Level</MenuItem><MenuItem value="false">Transaction</MenuItem>
-            </TextField>
-          </Grid>
-        </Grid>
-      </Paper>
+      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", pr: 0.5 }}>
+        {step === 0 && (
+          <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Purchase Order#" required value={poNumber} onChange={(e) => setPoNumber(e.target.value)}
+                  fullWidth size="small" error={!!validationErrors.poNumber} helperText={validationErrors.poNumber}
+                  InputProps={{ readOnly }} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Reference#" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)}
+                  fullWidth size="small" InputProps={{ readOnly }} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Shipment Preference" value={shipmentPreference} onChange={(e) => setShipmentPreference(e.target.value)}
+                  fullWidth size="small" placeholder="e.g. FedEx, DHL" InputProps={{ readOnly }} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Date" type="date" required value={poDate} onChange={(e) => setPoDate(e.target.value)}
+                  fullWidth size="small" InputLabelProps={{ shrink: true }}
+                  error={!!validationErrors.poDate} helperText={validationErrors.poDate}
+                  InputProps={{ readOnly }} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Delivery Date" type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
+                  fullWidth size="small" InputLabelProps={{ shrink: true }}
+                  inputProps={{ min: poDate }}
+                  error={!!validationErrors.deliveryDate} helperText={validationErrors.deliveryDate}
+                  InputProps={{ readOnly }} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="Payment Terms" select value={paymentTerms}
+                  onChange={(e) => handlePaymentTermsChange(e.target.value)}
+                  fullWidth size="small" disabled={readOnly}>
+                  {PAYMENT_TERMS.map((pt) => <MenuItem key={pt.value} value={pt.value}>{pt.label}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 2 }}>
+                <TextField select label="Tax Type" value={taxType} onChange={(e) => setTaxType(e.target.value)}
+                  fullWidth size="small" disabled={readOnly}>
+                  <MenuItem value="false">Exclusive</MenuItem><MenuItem value="true">Inclusive</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 2 }}>
+                <TextField select label="Tax Level" value={taxLevel} onChange={(e) => setTaxLevel(e.target.value)}
+                  fullWidth size="small" disabled={readOnly}>
+                  <MenuItem value="true">Item Level</MenuItem><MenuItem value="false">Transaction</MenuItem>
+                </TextField>
+              </Grid>
+            </Grid>
+          </Paper>
+        )}
 
-      {validationErrors.lineItems && <Alert severity="error" sx={{ mb: 1 }}>{validationErrors.lineItems}</Alert>}
-      <LineItemTable lineItems={lineItems} setLineItems={setLineItems} items={items} taxes={taxes} accounts={accounts} />
+        {step === 1 && (
+          <>
+            {validationErrors.lineItems && <Alert severity="error" sx={{ mb: 1 }}>{validationErrors.lineItems}</Alert>}
+            <Box sx={{ pointerEvents: readOnly ? "none" : "auto", opacity: readOnly ? 0.85 : 1 }}>
+              <LineItemTable lineItems={lineItems} setLineItems={setLineItems} items={items} taxes={taxes} accounts={accounts} />
+            </Box>
+          </>
+        )}
 
-      <TotalsSection lineItems={lineItems} taxes={taxes} discountValue={discountValue} setDiscountValue={setDiscountValue}
-        discountType={discountType} setDiscountType={setDiscountType} adjustmentValue={adjustmentValue}
-        setAdjustmentValue={setAdjustmentValue} isInclusiveTax={taxType === "true"} isItemLevelTax={taxLevel === "true"} />
+        {step === 2 && (
+          <>
+            <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
+              <Grid container spacing={2.5}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <TextField label="Notes" multiline minRows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
+                      fullWidth size="small" placeholder="Displayed on purchase order"
+                      InputProps={{ readOnly }} />
+                    <TextField label="Terms & Conditions" multiline minRows={3} value={terms} onChange={(e) => setTerms(e.target.value)}
+                      fullWidth size="small" placeholder="Terms and conditions"
+                      InputProps={{ readOnly }} />
+                  </Box>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TotalsSection lineItems={lineItems} taxes={taxes}
+                    discountValue={discountValue} setDiscountValue={setDiscountValue}
+                    discountType={discountType} setDiscountType={setDiscountType}
+                    adjustmentValue={adjustmentValue} setAdjustmentValue={setAdjustmentValue}
+                    isInclusiveTax={taxType === "true"} isItemLevelTax={taxLevel === "true"}
+                    accounts={accounts} discountAccountId={discountAccountId} setDiscountAccountId={setDiscountAccountId}
+                    readOnly={readOnly} />
+                </Grid>
+              </Grid>
+            </Paper>
 
-      <Paper elevation={0} sx={{ p: 2, mb: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <TextField label="Notes" multiline rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
-              fullWidth size="small" placeholder="Displayed on purchase order" />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField label="Terms & Conditions" multiline rows={2} value={terms} onChange={(e) => setTerms(e.target.value)}
-              fullWidth size="small" placeholder="Terms and conditions" />
-          </Grid>
-        </Grid>
-      </Paper>
+            <CustomFieldsSection customFields={customFieldsMeta} values={customValues}
+              setValues={setCustomValues} readOnly={readOnly} />
+          </>
+        )}
+      </Box>
 
-      <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end", mb: 4 }}>
-        <Button variant="outlined" onClick={onBack} disabled={submitting}>Cancel</Button>
-        {isEdit ? (
-          <Button variant="contained" startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-            onClick={() => handleSubmit()} disabled={submitting}>{submitting ? "Saving..." : "Update PO"}</Button>
-        ) : (<>
-          <Button variant="contained" startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-            onClick={() => handleSubmit("draft")} disabled={submitting}>{submitting ? "Saving..." : "Save as Draft"}</Button>
-          <Button variant="contained" color="success" startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-            onClick={() => handleSubmit("open")} disabled={submitting}>{submitting ? "Saving..." : "Save as Open"}</Button>
-        </>)}
+      <Box sx={{ display: "flex", gap: 1.5, justifyContent: "space-between", pt: 2, borderTop: 1, borderColor: "divider", bgcolor: "background.paper" }}>
+        <Button variant="outlined" onClick={onBack} disabled={submitting}>
+          {readOnly ? "Close" : "Cancel"}
+        </Button>
+        <Box sx={{ display: "flex", gap: 1.5 }}>
+          {step > 0 && (
+            <Button variant="outlined" onClick={handleBack} startIcon={<ArrowBackIcon />} disabled={submitting}>Back</Button>
+          )}
+          {step < STEPS.length - 1 && (
+            <Button variant="contained" onClick={handleNext} endIcon={<ArrowForwardIcon />} disabled={submitting}>Next</Button>
+          )}
+          {step === STEPS.length - 1 && !readOnly && (
+            isEdit ? (
+              <Button variant="contained" startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+                onClick={() => handleSubmit()} disabled={submitting}>{submitting ? "Saving..." : "Update PO"}</Button>
+            ) : (<>
+              <Button variant="outlined" color="primary"
+                startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+                onClick={() => handleSubmit("draft")} disabled={submitting}>
+                {submitting ? "Saving..." : "Save as Draft"}
+              </Button>
+              <Button variant="contained" color="success"
+                startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+                onClick={() => handleSubmit("open")} disabled={submitting}>
+                {submitting ? "Saving..." : "Save as Open"}
+              </Button>
+            </>)
+          )}
+        </Box>
       </Box>
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((s) => ({ ...s, open: false }))} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>

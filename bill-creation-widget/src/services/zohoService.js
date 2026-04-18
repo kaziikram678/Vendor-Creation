@@ -109,6 +109,26 @@ export async function fetchChartOfAccounts() {
   }));
 }
 
+export async function fetchCustomFields(entityType) {
+  try {
+    const data = await booksApi("GET", `/settings/customfields?entity_type=${entityType}`);
+    const list = data.customfields || data.custom_fields || [];
+    return list
+      .filter((f) => f.is_active !== false && f.show_in_all_pdf !== false)
+      .map((f) => ({
+        customfield_id: f.customfield_id,
+        api_name: f.api_name,
+        label: f.label || f.field_name_formatted || f.api_name,
+        data_type: (f.data_type || "string").toLowerCase(),
+        is_mandatory: !!f.is_mandatory,
+        values: f.values || [],
+      }));
+  } catch (err) {
+    console.warn("fetchCustomFields failed:", err.message);
+    return [];
+  }
+}
+
 /* ========== Bills ========== */
 
 export async function listBills(vendorId) {

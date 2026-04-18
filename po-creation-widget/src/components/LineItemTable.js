@@ -71,22 +71,22 @@ export default function LineItemTable({
   };
 
   return (
-    <Paper variant="outlined" sx={{ mt: 2, mb: 2 }}>
-      <Typography variant="subtitle1" sx={{ p: 1.5, fontWeight: 600, borderBottom: "1px solid #e0e0e0" }}>
+    <Paper variant="outlined" sx={{ mt: 2, mb: 2, width: "100%" }}>
+      <Typography variant="subtitle1" sx={{ p: 1.5, fontWeight: 600, borderBottom: 1, borderColor: "divider" }}>
         Item Table
       </Typography>
 
-      <TableContainer>
-        <Table size="small">
+      <TableContainer sx={{ width: "100%" }}>
+        <Table size="small" sx={{ tableLayout: "fixed", width: "100%" }}>
           <TableHead>
-            <TableRow sx={{ backgroundColor: "#fafafa" }}>
-              <TableCell sx={{ fontWeight: 600, minWidth: 220 }}>Item Details</TableCell>
-              <TableCell sx={{ fontWeight: 600, minWidth: 150 }}>Account</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 110 }}>Quantity</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 110 }}>Rate</TableCell>
-              <TableCell sx={{ fontWeight: 600, minWidth: 140 }}>Tax</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 100 }}>Amount</TableCell>
-              <TableCell sx={{ width: 50 }}></TableCell>
+            <TableRow sx={{ backgroundColor: (t) => t.palette.surface.alt }}>
+              <TableCell sx={{ fontWeight: 600, width: "28%" }}>Item Details</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: "18%" }}>Account</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 80 }}>Quantity</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 90 }}>Rate</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: "15%" }}>Tax</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 90 }} align="right">Amount</TableCell>
+              <TableCell sx={{ width: 40 }}></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -115,7 +115,7 @@ export default function LineItemTable({
                     minRows={1}
                     maxRows={3}
                     variant="standard"
-                    sx={{ mt: 0.5, "& .MuiInput-root": { fontSize: 12, color: "#888" } }}
+                    sx={{ mt: 0.5, "& .MuiInput-root": { fontSize: 12, color: "text.secondary" } }}
                     InputProps={{ disableUnderline: true }}
                   />
                 </TableCell>
