@@ -167,6 +167,30 @@ export async function rejectBill(billId) {
   return await booksApi("POST", `/bills/${billId}/reject`, {});
 }
 
+/* ========== Bill Attachments ========== */
+
+export async function uploadBillAttachment(billId, file) {
+  const url = `${BOOKS_BASE}/bills/${billId}/attachment?organization_id=${BOOKS_ORG_ID}&can_send_in_mail=false`;
+  // FormData preserves file binary via the browser's structured-clone postMessage path,
+  // unlike plain objects ({attachment: file}) which get JSON-serialised to {}
+  const formData = new FormData();
+  formData.append("attachment", file, file.name);
+  const config = { url, method: "POST", param_type: 2, parameters: formData };
+  const resp = await window.ZOHO.CRM.CONNECTION.invoke(CONNECTION_NAME, config);
+  console.log("[uploadBillAttachment] raw:", JSON.stringify(resp));
+  const body = resp?.details?.statusMessage || resp?.statusMessage || resp?.data || resp;
+  if (!body) return { code: 0 };
+  const data = typeof body === "string"
+    ? (() => { try { return JSON.parse(body); } catch { return { code: 0 }; } })()
+    : body;
+  if (data?.code !== undefined && data.code !== 0) throw new Error(data.message || `Upload failed (code ${data.code})`);
+  return data;
+}
+
+export async function deleteBillAttachment(billId, docId) {
+  return await booksApi("DELETE", `/bills/${billId}/attachment?documents=${docId}`);
+}
+
 /* ========== Bill Payments ========== */
 
 export async function recordBillPayment(billId, payload) {

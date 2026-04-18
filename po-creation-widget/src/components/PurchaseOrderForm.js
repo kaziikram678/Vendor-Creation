@@ -12,7 +12,8 @@ import dayjs from "dayjs";
 import LineItemTable, { createEmptyRow } from "./LineItemTable";
 import TotalsSection from "./TotalsSection";
 import CustomFieldsSection, { customFieldsToPayload, customFieldsFromRecord } from "./CustomFieldsSection";
-import { getPurchaseOrder, createPurchaseOrder, updatePurchaseOrder } from "../services/zohoService";
+import { getPurchaseOrder, createPurchaseOrder, updatePurchaseOrder, uploadPoAttachment, deletePoAttachment } from "../services/zohoService";
+import AttachmentsSection from "./AttachmentsSection";
 
 const PAYMENT_TERMS = [
   { value: 0, label: "Due on Receipt" }, { value: 15, label: "Net 15" },
@@ -50,6 +51,8 @@ export default function PurchaseOrderForm({
   const [adjustmentValue, setAdjustmentValue] = useState("0");
   const [customValues, setCustomValues] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
+  const [attachments, setAttachments] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState([]);
 
   const loadPO = useCallback(async () => {
     if (!editPoId) return;
@@ -78,6 +81,7 @@ export default function PurchaseOrderForm({
       setDiscountAccountId(po.discount_account_id || "");
 
       setCustomValues(customFieldsFromRecord(customFieldsMeta, po));
+      setAttachments(po.documents || []);
 
       if (po.line_items?.length) {
         setLineItems(po.line_items.map((li) => ({
@@ -94,6 +98,29 @@ export default function PurchaseOrderForm({
   }, [editPoId, customFieldsMeta]);
 
   useEffect(() => { loadPO(); }, [loadPO]);
+
+  const handleAddFiles = (valid, oversized) => {
+    if (oversized.length > 0) {
+      setSnackbar({ open: true, message: `${oversized.length} file(s) exceed 10MB and were skipped.`, severity: "warning" });
+    }
+    setPendingFiles((prev) => {
+      const remaining = 5 - attachments.length - prev.length;
+      return [...prev, ...valid.slice(0, remaining)];
+    });
+  };
+
+  const handleDeleteExisting = async (docId) => {
+    try {
+      await deletePoAttachment(editPoId, docId);
+      setAttachments((prev) => prev.filter((a) => a.doc_id !== docId));
+    } catch (err) {
+      setSnackbar({ open: true, message: "Failed to delete attachment: " + err.message, severity: "error" });
+    }
+  };
+
+  const handleDeletePending = (idx) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   const handlePaymentTermsChange = (val) => {
     const n = parseInt(val, 10);
@@ -164,13 +191,34 @@ export default function PurchaseOrderForm({
       const adj = parseFloat(adjustmentValue) || 0;
       if (adj !== 0) { payload.adjustment = adj; payload.adjustment_description = adj > 0 ? "Adjustment (add)" : "Adjustment (deduct)"; }
 
+      let savedPoId = editPoId;
+      let successMessage = "";
+
       if (isEdit) {
         await updatePurchaseOrder(editPoId, payload);
-        setSnackbar({ open: true, message: "Purchase Order updated!", severity: "success" });
+        successMessage = "Purchase Order updated!";
       } else {
-        await createPurchaseOrder(payload, status);
-        setSnackbar({ open: true, message: "Purchase Order created!", severity: "success" });
+        const po = await createPurchaseOrder(payload, status);
+        savedPoId = po.purchaseorder_id;
+        successMessage = "Purchase Order created!";
       }
+
+      if (pendingFiles.length > 0 && savedPoId) {
+        let failed = 0;
+        const errors = [];
+        for (const file of pendingFiles) {
+          try { await uploadPoAttachment(savedPoId, file); }
+          catch (err) {
+            console.error("[PurchaseOrderForm] attachment upload failed:", file.name, err.message);
+            errors.push(file.name + ": " + err.message);
+            failed++;
+          }
+        }
+        if (failed > 0) successMessage += ` (${failed} attachment(s) failed to upload)`;
+        if (errors.length) console.error("[PurchaseOrderForm] upload errors:", errors);
+      }
+
+      setSnackbar({ open: true, message: successMessage, severity: "success" });
       setTimeout(() => onBack(), 1200);
     } catch (err) {
       setError(err.message);
@@ -297,6 +345,15 @@ export default function PurchaseOrderForm({
 
             <CustomFieldsSection customFields={customFieldsMeta} values={customValues}
               setValues={setCustomValues} readOnly={readOnly} />
+
+            <AttachmentsSection
+              attachments={attachments}
+              pendingFiles={pendingFiles}
+              onAddFiles={handleAddFiles}
+              onDeleteExisting={handleDeleteExisting}
+              onDeletePending={handleDeletePending}
+              readOnly={readOnly}
+            />
           </>
         )}
       </Box>

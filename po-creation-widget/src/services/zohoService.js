@@ -223,6 +223,28 @@ export async function listBillsForVendor(vendorId) {
   return data.bills || [];
 }
 
+/* ========== PO Attachments ========== */
+
+export async function uploadPoAttachment(poId, file) {
+  const url = `${BOOKS_BASE}/purchaseorders/${poId}/attachment?organization_id=${BOOKS_ORG_ID}&can_send_in_mail=false`;
+  const formData = new FormData();
+  formData.append("attachment", file, file.name);
+  const config = { url, method: "POST", param_type: 2, parameters: formData };
+  const resp = await window.ZOHO.CRM.CONNECTION.invoke(CONNECTION_NAME, config);
+  console.log("[uploadPoAttachment] raw:", JSON.stringify(resp));
+  const body = resp?.details?.statusMessage || resp?.statusMessage || resp?.data || resp;
+  if (!body) return { code: 0 };
+  const data = typeof body === "string"
+    ? (() => { try { return JSON.parse(body); } catch { return { code: 0 }; } })()
+    : body;
+  if (data?.code !== undefined && data.code !== 0) throw new Error(data.message || `Upload failed (code ${data.code})`);
+  return data;
+}
+
+export async function deletePoAttachment(poId, docId) {
+  return await booksApi("DELETE", `/purchaseorders/${poId}/attachment?documents=${docId}`);
+}
+
 /* ========== Bills (for Convert to Bill) ========== */
 
 export async function createBill(payload, status = "draft") {

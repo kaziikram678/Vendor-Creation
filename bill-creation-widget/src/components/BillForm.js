@@ -13,7 +13,8 @@ import dayjs from "dayjs";
 import LineItemTable, { createEmptyRow } from "./LineItemTable";
 import TotalsSection from "./TotalsSection";
 import CustomFieldsSection, { customFieldsToPayload, customFieldsFromRecord } from "./CustomFieldsSection";
-import { getBill, createBill, updateBill, submitBillForApproval, approveBill } from "../services/zohoService";
+import { getBill, createBill, updateBill, submitBillForApproval, approveBill, uploadBillAttachment, deleteBillAttachment } from "../services/zohoService";
+import AttachmentsSection from "./AttachmentsSection";
 
 const PAYMENT_TERMS = [
   { value: 0, label: "Due on Receipt" }, { value: 15, label: "Net 15" },
@@ -49,6 +50,8 @@ export default function BillForm({
   const [customValues, setCustomValues] = useState({});
   const [editStatus, setEditStatus] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
+  const [attachments, setAttachments] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState([]);
 
   const loadBill = useCallback(async () => {
     if (!editBillId) return;
@@ -75,6 +78,7 @@ export default function BillForm({
       setDiscountAccountId(bill.discount_account_id || "");
 
       setCustomValues(customFieldsFromRecord(customFieldsMeta, bill));
+      setAttachments(bill.documents || []);
 
       if (bill.line_items?.length) {
         setLineItems(bill.line_items.map((li) => ({
@@ -97,6 +101,29 @@ export default function BillForm({
       setDueDate(dayjs(billDate).add(paymentTerms, "day").format("YYYY-MM-DD"));
     }
   }, [billDate, paymentTerms, isEdit]);
+
+  const handleAddFiles = (valid, oversized) => {
+    if (oversized.length > 0) {
+      setSnackbar({ open: true, message: `${oversized.length} file(s) exceed 10MB and were skipped.`, severity: "warning" });
+    }
+    setPendingFiles((prev) => {
+      const remaining = 5 - attachments.length - prev.length;
+      return [...prev, ...valid.slice(0, remaining)];
+    });
+  };
+
+  const handleDeleteExisting = async (docId) => {
+    try {
+      await deleteBillAttachment(editBillId, docId);
+      setAttachments((prev) => prev.filter((a) => a.doc_id !== docId));
+    } catch (err) {
+      setSnackbar({ open: true, message: "Failed to delete attachment: " + err.message, severity: "error" });
+    }
+  };
+
+  const handleDeletePending = (idx) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   const handlePaymentTermsChange = (val) => {
     const n = parseInt(val, 10);
@@ -166,26 +193,49 @@ export default function BillForm({
       const adj = parseFloat(adjustmentValue) || 0;
       if (adj !== 0) { payload.adjustment = adj; payload.adjustment_description = adj > 0 ? "Adjustment (add)" : "Adjustment (deduct)"; }
 
+      let savedBillId = editBillId;
+      let successMessage = "";
+
       if (isEdit) {
         await updateBill(editBillId, payload);
         if (action === "submit" && editStatus === "draft") {
           await submitBillForApproval(editBillId);
-          setSnackbar({ open: true, message: "Bill updated and submitted for approval!", severity: "success" });
+          successMessage = "Bill updated and submitted for approval!";
         } else {
-          setSnackbar({ open: true, message: "Bill updated successfully!", severity: "success" });
+          successMessage = "Bill updated successfully!";
         }
       } else if (action === "submit") {
         const bill = await createBill(payload, "draft");
-        await submitBillForApproval(bill.bill_id);
-        setSnackbar({ open: true, message: "Bill submitted for approval!", severity: "success" });
+        savedBillId = bill.bill_id;
+        await submitBillForApproval(savedBillId);
+        successMessage = "Bill submitted for approval!";
       } else if (action === "approve") {
         const bill = await createBill(payload, "draft");
-        await approveBill(bill.bill_id);
-        setSnackbar({ open: true, message: "Bill created and approved!", severity: "success" });
+        savedBillId = bill.bill_id;
+        await approveBill(savedBillId);
+        successMessage = "Bill created and approved!";
       } else {
-        await createBill(payload, action || "draft");
-        setSnackbar({ open: true, message: "Bill created successfully!", severity: "success" });
+        const bill = await createBill(payload, action || "draft");
+        savedBillId = bill.bill_id;
+        successMessage = "Bill created successfully!";
       }
+
+      if (pendingFiles.length > 0 && savedBillId) {
+        let failed = 0;
+        const errors = [];
+        for (const file of pendingFiles) {
+          try { await uploadBillAttachment(savedBillId, file); }
+          catch (err) {
+            console.error("[BillForm] attachment upload failed:", file.name, err.message);
+            errors.push(file.name + ": " + err.message);
+            failed++;
+          }
+        }
+        if (failed > 0) successMessage += ` (${failed} attachment(s) failed to upload)`;
+        if (errors.length) console.error("[BillForm] upload errors:", errors);
+      }
+
+      setSnackbar({ open: true, message: successMessage, severity: "success" });
       setTimeout(() => onBack(), 1200);
     } catch (err) {
       setError(err.message);
@@ -279,6 +329,14 @@ export default function BillForm({
             </Paper>
 
             <CustomFieldsSection customFields={customFieldsMeta} values={customValues} setValues={setCustomValues} />
+
+            <AttachmentsSection
+              attachments={attachments}
+              pendingFiles={pendingFiles}
+              onAddFiles={handleAddFiles}
+              onDeleteExisting={handleDeleteExisting}
+              onDeletePending={handleDeletePending}
+            />
           </>
         )}
       </Box>
