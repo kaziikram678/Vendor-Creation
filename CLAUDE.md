@@ -15,10 +15,11 @@ Vendor_Creation/
         Dashboard.js           # Bill list view with actions (record payment, edit, delete)
         BillForm.js            # Create/edit bill form (Save as Draft / Save and Submit / Save and Approve)
         RecordPaymentForm.js   # Record payment against an open bill
+        AttachmentsSection.js  # File attachment UI (upload, list, delete) used on Step 2 of BillForm
         LineItemTable.js       # Shared line items table with description field
         TotalsSection.js       # Shared totals/discount/adjustment section
       services/
-        zohoService.js         # All Zoho CRM + Books API calls (bills, items, taxes, accounts, payments)
+        zohoService.js         # All Zoho CRM + Books API calls (bills, items, taxes, accounts, payments, attachments)
   po-creation-widget/          # React app - Purchase Order management widget (embedded in CRM)
     src/
       App.js                   # Entry point, Zoho SDK init, MUI theme
@@ -26,10 +27,11 @@ Vendor_Creation/
         Dashboard.js           # PO list view with actions (mark as issued, convert to bill, view bills, edit, delete)
         PurchaseOrderForm.js   # Create/edit purchase order form
         ConvertToBillForm.js   # Convert an issued PO to a bill (pre-filled bill form)
+        AttachmentsSection.js  # File attachment UI (upload, list, delete) used on Step 2 of PurchaseOrderForm
         LineItemTable.js       # Shared line items table with description field
         TotalsSection.js       # Shared totals/discount/adjustment section
       services/
-        zohoService.js         # All Zoho CRM + Books API calls (POs, items, taxes, accounts, bills)
+        zohoService.js         # All Zoho CRM + Books API calls (POs, items, taxes, accounts, bills, attachments)
   createVendorInBooks.dg       # Deluge: syncs CRM Vendor -> Books contact (create/update)
   updateVendorInCRM.dg         # Deluge: syncs Books contact -> CRM Vendor (reverse sync on update)
   createBillInBooks.dg         # Deluge: server-side bill creation in Books
@@ -73,6 +75,7 @@ npm test           # Run tests
 - **Create**: Save as Draft / Save and Submit (→ pending_approval) / Save and Approve (→ open)
 - **Record Payment**: Open/partially_paid/overdue bills can have payments recorded via `/vendorpayments` API
 - **Edit/Delete**: Available on all bills
+- **Attachments**: Files attached in widget are uploaded to Books after save; existing Books attachments load on edit; deletions are immediate via DELETE API
 - Items filtered to exclude sales-only items (`item_type !== "sales"`)
 - Due date picker prevents selecting dates before bill date
 - Line items include a description field below the item selector
@@ -84,9 +87,20 @@ npm test           # Run tests
 - **Convert to Bill**: Issued POs can be converted to a bill (creates bill with `purchaseorder_ids` linking)
 - **View Bills**: Closed/billed POs show a popover with linked bills (clickable to open in Zoho Books)
 - **Edit/Delete**: Available on all POs
+- **Attachments**: Same bidirectional sync as bill widget, works in edit and readOnly (view-only) modes
 - Items filtered to exclude sales-only items
 - Accounts fetched from multiple types: Expense, CostOfGoodsSold, FixedAsset, OtherCurrentAsset
 - Line items include a description field below the item selector
+
+## Attachments Feature
+
+- **Component**: `AttachmentsSection.js` in each widget's `components/` — renders upload button, file list, delete icons
+- **Limits**: Max 5 files, 10 MB each — enforced client-side with snackbar warning for oversized files
+- **Pending state**: Files queued before save show a "pending upload" chip; they are uploaded sequentially after the bill/PO record is saved/created
+- **Sync from Books**: Existing attachments are loaded from the `documents` array in the `GET /bills/{id}` or `GET /purchaseorders/{id}` response whenever the edit/view form opens
+- **Upload API**: `POST /bills/{id}/attachment` and `POST /purchaseorders/{id}/attachment` via `CONNECTION.invoke` with `param_type: 2` and a native `FormData` object (not a plain `{attachment: file}` object — plain objects get JSON-serialised to `{}`, losing binary data; `FormData` is preserved via the browser's structured-clone postMessage path)
+- **Delete API**: `DELETE /bills/{id}/attachment?documents={doc_id}` — fires immediately when the user clicks the delete icon in edit mode
+- **Known SDK limitation**: `ZOHO.CRM.CONNECTION.getAuthToken` does not exist in ZohoEmbededAppSDK v1.2 or v1.3; the `fetch + Authorization` upload pattern requires a newer SDK or a Deluge function proxy
 
 ## API Patterns
 
@@ -94,6 +108,7 @@ npm test           # Run tests
 - `parseConnectionResponse()` handles centralized response parsing
 - `Promise.allSettled` for parallel API calls that can independently fail
 - `booksApi()` is a unified helper for all Books API methods (GET, POST, PUT, DELETE)
+- Attachment upload uses a separate lenient response parser (empty response treated as success) since the Books attachment endpoint response format differs slightly
 - Paid Through accounts for bill payments: fetched from all chart of accounts, filtered client-side by applicable types (cash, bank, equity, other_current_liability, etc.)
 
 ## Conventions
