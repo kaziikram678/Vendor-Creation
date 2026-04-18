@@ -21,7 +21,7 @@ import ConvertToBillForm from "./ConvertToBillForm";
 import {
   getCurrentVendor, fetchItems, fetchTaxes, fetchChartOfAccounts, fetchCustomFields,
   listPurchaseOrders, deletePurchaseOrder, markPoAsIssued, getPurchaseOrder,
-  getLocallyBilledPoIds,
+  getLocallyBilledPoIds, getLocalBillsForPo, getBill,
 } from "../services/zohoService";
 
 const STATUS_COLORS = {
@@ -155,7 +155,17 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
     setBillsLoading(true);
     try {
       const po = await getPurchaseOrder(poId);
-      setBillsList(po.bills || []);
+      let bills = po.bills || [];
+      if (bills.length === 0) {
+        const localBillIds = getLocalBillsForPo(vendor?.booksVendorId, poId);
+        if (localBillIds.length > 0) {
+          const fetched = await Promise.allSettled(localBillIds.map((id) => getBill(id)));
+          bills = fetched
+            .filter((r) => r.status === "fulfilled" && r.value)
+            .map((r) => r.value);
+        }
+      }
+      setBillsList(bills);
     } catch {
       setBillsList([]);
     } finally {

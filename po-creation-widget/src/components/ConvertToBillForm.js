@@ -12,7 +12,7 @@ import dayjs from "dayjs";
 import LineItemTable, { createEmptyRow } from "./LineItemTable";
 import TotalsSection from "./TotalsSection";
 import CustomFieldsSection, { customFieldsToPayload } from "./CustomFieldsSection";
-import { getPurchaseOrder, createBill, addLocallyBilledPoId } from "../services/zohoService";
+import { getPurchaseOrder, createBill, recordLocalPoBillLink } from "../services/zohoService";
 
 const PAYMENT_TERMS = [
   { value: 0, label: "Due on Receipt" }, { value: 15, label: "Net 15" },
@@ -150,8 +150,9 @@ export default function ConvertToBillForm({
       const adj = parseFloat(adjustmentValue) || 0;
       if (adj !== 0) { payload.adjustment = adj; payload.adjustment_description = adj > 0 ? "Adjustment (add)" : "Adjustment (deduct)"; }
 
-      await createBill(payload, status);
-      addLocallyBilledPoId(vendor.booksVendorId, poId);
+      const createdBill = await createBill(payload, status);
+      const newBillId = createdBill?.bill_id || createdBill?.bill?.bill_id;
+      if (newBillId) recordLocalPoBillLink(vendor.booksVendorId, poId, newBillId);
       setSnackbar({ open: true, message: "Bill created. Purchase Order is now marked as billed.", severity: "success" });
       setTimeout(() => onBack(), 1200);
     } catch (err) {

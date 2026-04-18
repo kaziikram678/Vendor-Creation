@@ -170,25 +170,52 @@ export async function markPoAsIssued(poId) {
   return await booksApi("POST", `/purchaseorders/${poId}/status/issued`, {});
 }
 
-const LOCAL_BILLED_KEY = (vendorId) => `billed-pos:${vendorId}`;
+const LOCAL_PO_BILLS_KEY = (vendorId) => `po-bill-map:${vendorId}`;
+const LEGACY_BILLED_KEY = (vendorId) => `billed-pos:${vendorId}`;
 
-export function getLocallyBilledPoIds(vendorId) {
-  if (!vendorId) return new Set();
+function readPoBillMap(vendorId) {
+  if (!vendorId) return {};
   try {
-    const raw = localStorage.getItem(LOCAL_BILLED_KEY(vendorId));
-    return new Set(raw ? JSON.parse(raw) : []);
+    const raw = localStorage.getItem(LOCAL_PO_BILLS_KEY(vendorId));
+    const map = raw ? JSON.parse(raw) : {};
+    const legacy = localStorage.getItem(LEGACY_BILLED_KEY(vendorId));
+    if (legacy) {
+      (JSON.parse(legacy) || []).forEach((poId) => { if (!map[poId]) map[poId] = []; });
+    }
+    return map;
   } catch {
-    return new Set();
+    return {};
   }
 }
 
-export function addLocallyBilledPoId(vendorId, poId) {
-  if (!vendorId || !poId) return;
+function writePoBillMap(vendorId, map) {
+  if (!vendorId) return;
   try {
-    const set = getLocallyBilledPoIds(vendorId);
-    set.add(poId);
-    localStorage.setItem(LOCAL_BILLED_KEY(vendorId), JSON.stringify([...set]));
+    localStorage.setItem(LOCAL_PO_BILLS_KEY(vendorId), JSON.stringify(map));
   } catch {}
+}
+
+export function getLocallyBilledPoIds(vendorId) {
+  return new Set(Object.keys(readPoBillMap(vendorId)));
+}
+
+export function getLocalBillsForPo(vendorId, poId) {
+  const map = readPoBillMap(vendorId);
+  return map[poId] || [];
+}
+
+export function recordLocalPoBillLink(vendorId, poId, billId) {
+  if (!vendorId || !poId || !billId) return;
+  const map = readPoBillMap(vendorId);
+  const list = new Set(map[poId] || []);
+  list.add(billId);
+  map[poId] = [...list];
+  writePoBillMap(vendorId, map);
+}
+
+export async function getBill(billId) {
+  const data = await booksApi("GET", `/bills/${billId}`);
+  return data.bill || data;
 }
 
 /* ========== Bills (for Convert to Bill) ========== */
