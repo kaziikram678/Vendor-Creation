@@ -170,6 +170,19 @@ export async function markPoAsIssued(poId) {
   return await booksApi("POST", `/purchaseorders/${poId}/status/issued`, {});
 }
 
+export async function markPurchaseOrderAsBilled(poId) {
+  try {
+    return await booksApi("POST", `/purchaseorders/${poId}/status/billed`, {});
+  } catch (err) {
+    try {
+      return await booksApi("POST", `/purchaseorders/${poId}/status/closed`, {});
+    } catch (err2) {
+      console.warn("Could not mark PO as billed/closed:", err2.message);
+      throw err2;
+    }
+  }
+}
+
 /* ========== Bills (for Convert to Bill) ========== */
 
 export async function createBill(payload, status = "draft") {
