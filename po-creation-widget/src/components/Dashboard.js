@@ -21,6 +21,7 @@ import ConvertToBillForm from "./ConvertToBillForm";
 import {
   getCurrentVendor, fetchItems, fetchTaxes, fetchChartOfAccounts, fetchCustomFields,
   listPurchaseOrders, deletePurchaseOrder, markPoAsIssued, getPurchaseOrder,
+  getLocallyBilledPoIds,
 } from "../services/zohoService";
 
 const STATUS_COLORS = {
@@ -51,6 +52,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
   const [pos, setPos] = useState([]);
   const [poCustomFields, setPoCustomFields] = useState([]);
   const [billCustomFields, setBillCustomFields] = useState([]);
+  const [locallyBilled, setLocallyBilled] = useState(() => new Set());
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
@@ -81,6 +83,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
       if (poCf.status === "fulfilled") setPoCustomFields(poCf.value);
       if (billCf.status === "fulfilled") setBillCustomFields(billCf.value);
 
+      setLocallyBilled(getLocallyBilledPoIds(v.booksVendorId));
       await loadPOs(v.booksVendorId);
     } catch (err) {
       setError(err.message);
@@ -97,6 +100,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
     try {
       const p = await listPurchaseOrders(vid);
       setPos(p);
+      setLocallyBilled(getLocallyBilledPoIds(vid));
     } catch (err) {
       setSnackbar({ open: true, message: "Failed to refresh purchase orders.", severity: "error" });
     } finally {
@@ -270,14 +274,15 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
               </TableHead>
               <TableBody>
                 {pos.map((p) => {
-                  const isBilled = BILLED_STATUSES.has(p.status);
+                  const isBilled = BILLED_STATUSES.has(p.status) || locallyBilled.has(p.purchaseorder_id);
+                  const displayStatus = isBilled ? "billed" : p.status;
                   return (
                     <TableRow key={p.purchaseorder_id} hover sx={{ "&:hover": { bgcolor: "surface.hover" } }}>
                       <TableCell sx={tdStyle}>{p.date}</TableCell>
                       <TableCell sx={{ ...tdStyle, fontWeight: 600, color: "#1565c0", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}
                         onClick={() => window.open(`https://books.zoho.com/app/771340721#/purchaseorders/${p.purchaseorder_id}`, "_blank")}>{p.purchaseorder_number}</TableCell>
                       <TableCell sx={tdStyle}>{p.reference_number || "—"}</TableCell>
-                      <TableCell><StatusChip status={p.status} /></TableCell>
+                      <TableCell><StatusChip status={displayStatus} /></TableCell>
                       <TableCell sx={tdStyle}>{p.delivery_date || "—"}</TableCell>
                       <TableCell sx={tdStyle} align="right">{formatCurrency(p.total)}</TableCell>
                       <TableCell>
@@ -289,14 +294,14 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
                               </IconButton>
                             </Tooltip>
                           )}
-                          {p.status === "draft" && (
+                          {!isBilled && p.status === "draft" && (
                             <Tooltip title="Mark as Issued">
                               <IconButton size="small" color="info" onClick={() => setIssueConfirm(p)}>
                                 <CheckCircleIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                           )}
-                          {(p.status === "issued" || p.status === "open") && (
+                          {!isBilled && (p.status === "issued" || p.status === "open") && (
                             <Tooltip title="Convert to Bill">
                               <IconButton size="small" color="success" onClick={() => openConvertToBill(p.purchaseorder_id)}>
                                 <ReceiptLongIcon fontSize="small" />

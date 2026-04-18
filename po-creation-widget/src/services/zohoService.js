@@ -170,17 +170,25 @@ export async function markPoAsIssued(poId) {
   return await booksApi("POST", `/purchaseorders/${poId}/status/issued`, {});
 }
 
-export async function markPurchaseOrderAsBilled(poId) {
+const LOCAL_BILLED_KEY = (vendorId) => `billed-pos:${vendorId}`;
+
+export function getLocallyBilledPoIds(vendorId) {
+  if (!vendorId) return new Set();
   try {
-    return await booksApi("POST", `/purchaseorders/${poId}/status/billed`, {});
-  } catch (err) {
-    try {
-      return await booksApi("POST", `/purchaseorders/${poId}/status/closed`, {});
-    } catch (err2) {
-      console.warn("Could not mark PO as billed/closed:", err2.message);
-      throw err2;
-    }
+    const raw = localStorage.getItem(LOCAL_BILLED_KEY(vendorId));
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
   }
+}
+
+export function addLocallyBilledPoId(vendorId, poId) {
+  if (!vendorId || !poId) return;
+  try {
+    const set = getLocallyBilledPoIds(vendorId);
+    set.add(poId);
+    localStorage.setItem(LOCAL_BILLED_KEY(vendorId), JSON.stringify([...set]));
+  } catch {}
 }
 
 /* ========== Bills (for Convert to Bill) ========== */
