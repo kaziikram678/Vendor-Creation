@@ -1,0 +1,30 @@
+// Zoho CRM Custom Function: upload_attachment_to_books
+// API Name: upload_attachment_to_books
+// Arguments: entity_type (string), entity_id (string), file_name (string), file_data (string, base64)
+//
+// This function acts as a proxy: the widget base64-encodes the file and passes it here.
+// Deluge decodes it and uploads via invokeurl (multipart/form-data) to Zoho Books.
+
+entity_type = input.get("entity_type"); // "bills" or "purchaseorders"
+entity_id   = input.get("entity_id");
+file_name   = input.get("file_name");
+file_data   = input.get("file_data");   // base64-encoded file content
+
+org_id = "771340721";
+upload_url = "https://www.zohoapis.com/books/v3/" + entity_type + "/" + entity_id
+           + "/attachment?organization_id=" + org_id + "&can_send_in_mail=false";
+
+// Decode base64 string back to raw bytes
+file_bytes = file_data.base64Decode();
+
+// Upload to Books as multipart/form-data (invokeurl handles Content-Type automatically)
+response = invokeurl
+[
+	url: upload_url
+	type: POST
+	files: {"paramname": "attachment", "content": file_bytes, "filename": file_name}
+	connection: "zoho_books_testing"
+];
+
+info "upload_attachment_to_books response: " + response;
+return response.toString();

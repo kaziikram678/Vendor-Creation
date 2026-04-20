@@ -225,18 +225,34 @@ export async function listBillsForVendor(vendorId) {
 
 /* ========== PO Attachments ========== */
 
+async function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function uploadPoAttachment(poId, file) {
-  const url = `${BOOKS_BASE}/purchaseorders/${poId}/attachment?organization_id=${BOOKS_ORG_ID}&can_send_in_mail=false`;
-  const formData = new FormData();
-  formData.append("attachment", file, file.name);
-  const config = { url, method: "POST", param_type: 2, parameters: formData };
-  const resp = await window.ZOHO.CRM.CONNECTION.invoke(CONNECTION_NAME, config);
-  console.log("[uploadPoAttachment] raw:", JSON.stringify(resp));
-  const body = resp?.details?.statusMessage || resp?.statusMessage || resp?.data || resp;
-  if (!body) return { code: 0 };
-  const data = typeof body === "string"
-    ? (() => { try { return JSON.parse(body); } catch { return { code: 0 }; } })()
-    : body;
+  const fileData = await readFileAsBase64(file);
+  const resp = await window.ZOHO.CRM.FUNCTIONS.execute({
+    api_name: "upload_attachment_to_books",
+    params: {
+      arguments: JSON.stringify({
+        entity_type: "purchaseorders",
+        entity_id: poId,
+        file_name: file.name,
+        file_data: fileData,
+      }),
+    },
+  });
+  console.log("[uploadPoAttachment] FUNCTIONS.execute raw:", JSON.stringify(resp));
+  const output = resp?.details?.output;
+  if (!output) return { code: 0 };
+  const data = typeof output === "string"
+    ? (() => { try { return JSON.parse(output); } catch { return { code: 0 }; } })()
+    : output;
   if (data?.code !== undefined && data.code !== 0) throw new Error(data.message || `Upload failed (code ${data.code})`);
   return data;
 }

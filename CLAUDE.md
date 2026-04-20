@@ -98,9 +98,10 @@ npm test           # Run tests
 - **Limits**: Max 5 files, 10 MB each — enforced client-side with snackbar warning for oversized files
 - **Pending state**: Files queued before save show a "pending upload" chip; they are uploaded sequentially after the bill/PO record is saved/created
 - **Sync from Books**: Existing attachments are loaded from the `documents` array in the `GET /bills/{id}` or `GET /purchaseorders/{id}` response whenever the edit/view form opens
-- **Upload API**: `POST /bills/{id}/attachment` and `POST /purchaseorders/{id}/attachment` via `CONNECTION.invoke` with `param_type: 2` and a native `FormData` object (not a plain `{attachment: file}` object — plain objects get JSON-serialised to `{}`, losing binary data; `FormData` is preserved via the browser's structured-clone postMessage path)
+- **Upload API**: Widget reads each file as base64 via `FileReader.readAsDataURL`, then calls the `upload_attachment_to_books` Deluge custom function via `ZOHO.CRM.FUNCTIONS.execute`. The Deluge function decodes the base64 back to bytes and uploads to Books using `invokeurl` with the `files` parameter (multipart/form-data). This proxy pattern is required because `ZOHO.CRM.CONNECTION.invoke` always JSON-stringifies parameters (confirmed in SDK v1.2 source: `f.parameters=JSON.stringify(d.parameters)`), making direct binary upload impossible from the widget.
+- **Deluge proxy function**: `uploadAttachmentToBooks.dg` — must be registered in Zoho CRM as a standalone function with API name `upload_attachment_to_books`. Accepts `entity_type` (bills/purchaseorders), `entity_id`, `file_name`, `file_data` (base64 string).
 - **Delete API**: `DELETE /bills/{id}/attachment?documents={doc_id}` — fires immediately when the user clicks the delete icon in edit mode
-- **Known SDK limitation**: `ZOHO.CRM.CONNECTION.getAuthToken` does not exist in ZohoEmbededAppSDK v1.2 or v1.3; the `fetch + Authorization` upload pattern requires a newer SDK or a Deluge function proxy
+- **Known SDK limitation**: `ZOHO.CRM.CONNECTION.getAuthToken` does not exist in ZohoEmbededAppSDK v1.2 or v1.3; `CONNECTION.invoke` cannot transmit binary data; binary uploads must go through the Deluge proxy
 
 ## API Patterns
 
