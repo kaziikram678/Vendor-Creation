@@ -185,7 +185,7 @@ export default function ConvertToBillForm({
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", pr: 0.5 }}>
+      <Box sx={{ flex: 1, overflowX: "hidden", pr: 0.5 }}>
         {step === 0 && (
           <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
             <Grid container spacing={2}>
@@ -238,7 +238,7 @@ export default function ConvertToBillForm({
             <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
               <Grid container spacing={2.5}>
                 <Grid size={{ xs: 12, md: 6 }}>
-                  <TextField label="Notes" multiline minRows={7} value={notes} onChange={(e) => setNotes(e.target.value)}
+                  <TextField label="Notes" multiline minRows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
                     fullWidth size="small" placeholder="Notes (not shown in PDF)" />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>

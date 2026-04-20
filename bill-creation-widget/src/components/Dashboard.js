@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Box, Typography, Button, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, CircularProgress, Alert,
+  TableContainer, TableHead, TableRow, TablePagination, Chip, CircularProgress, Alert,
   Paper, IconButton, Tooltip, Snackbar,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from "@mui/material";
@@ -51,6 +51,10 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
+
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+  useEffect(() => { setPage(0); }, [bills.length]);
 
   const loadInitial = useCallback(async () => {
     try {
@@ -213,7 +217,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
           </Tooltip>
         </Box>
 
-        <TableContainer sx={{ flex: 1, overflowY: "auto" }}>
+        <TableContainer sx={{ flex: 1 }}>
           {bills.length === 0 ? (
             <Box sx={{ py: 6, textAlign: "center" }}>
               <ReceiptLongIcon sx={{ fontSize: 48, color: "text.disabled", mb: 1 }} />
@@ -237,7 +241,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
                 </TableRow>
               </TableHead>
               <TableBody>
-                {bills.map((b) => (
+                {bills.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((b) => (
                   <TableRow key={b.bill_id} hover sx={{ "&:hover": { bgcolor: "surface.hover" } }}>
                     <TableCell sx={tdStyle}>{b.date}</TableCell>
                     <TableCell sx={{ ...tdStyle, fontWeight: 600, color: "#1565c0", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}
@@ -281,6 +285,18 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
             </Table>
           )}
         </TableContainer>
+        {bills.length > 0 && (
+          <TablePagination
+            component="div"
+            count={bills.length}
+            page={page}
+            onPageChange={(_, newPage) => setPage(newPage)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+            rowsPerPageOptions={[5, 10, 25, 50]}
+            sx={{ borderTop: 1, borderColor: "divider" }}
+          />
+        )}
       </Paper>
 
       <Dialog open={!!submitConfirm} onClose={() => !submittingApproval && setSubmitConfirm(null)}>

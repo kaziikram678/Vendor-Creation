@@ -75,7 +75,9 @@ npm test           # Run tests
 - **Create**: Save as Draft / Save and Submit (→ pending_approval) / Save and Approve (→ open)
 - **Record Payment**: Open/partially_paid/overdue bills can have payments recorded via `/vendorpayments` API
 - **Edit/Delete**: Available on all bills
+- **Form steps**: Basic Info → Items → Totals & Notes → Attachments (4-step stepper; attachments live on their own step so the Totals panel never gets pushed off-screen)
 - **Attachments**: Files attached in widget are uploaded to Books after save; existing Books attachments load on edit; deletions are immediate via DELETE API
+- **Dashboard**: Bill list uses MUI `TablePagination` (default 5 rows/page; options 5/10/25/50) — no internal scroll
 - Items filtered to exclude sales-only items (`item_type !== "sales"`)
 - Due date picker prevents selecting dates before bill date
 - Line items include a description field below the item selector
@@ -87,7 +89,9 @@ npm test           # Run tests
 - **Convert to Bill**: Issued POs can be converted to a bill (creates bill with `purchaseorder_ids` linking)
 - **View Bills**: Closed/billed POs show a popover with linked bills (clickable to open in Zoho Books)
 - **Edit/Delete**: Available on all POs
+- **Form steps**: Basic Info → Items → Totals & Notes → Attachments (same 4-step layout as bill widget)
 - **Attachments**: Same bidirectional sync as bill widget, works in edit and readOnly (view-only) modes
+- **Dashboard**: PO list uses MUI `TablePagination` (default 5 rows/page; options 5/10/25/50)
 - Items filtered to exclude sales-only items
 - Accounts fetched from multiple types: Expense, CostOfGoodsSold, FixedAsset, OtherCurrentAsset
 - Line items include a description field below the item selector
@@ -98,10 +102,18 @@ npm test           # Run tests
 - **Limits**: Max 5 files, 10 MB each — enforced client-side with snackbar warning for oversized files
 - **Pending state**: Files queued before save show a "pending upload" chip; they are uploaded sequentially after the bill/PO record is saved/created
 - **Sync from Books**: Existing attachments are loaded from the `documents` array in the `GET /bills/{id}` or `GET /purchaseorders/{id}` response whenever the edit/view form opens
-- **Upload API**: Widget reads each file as base64 via `FileReader.readAsDataURL`, then calls the `upload_attachment_to_books` Deluge custom function via `ZOHO.CRM.FUNCTIONS.execute`. The Deluge function decodes the base64 back to bytes and uploads to Books using `invokeurl` with the `files` parameter (multipart/form-data). This proxy pattern is required because `ZOHO.CRM.CONNECTION.invoke` always JSON-stringifies parameters (confirmed in SDK v1.2 source: `f.parameters=JSON.stringify(d.parameters)`), making direct binary upload impossible from the widget.
-- **Deluge proxy function**: `uploadAttachmentToBooks.dg` — must be registered in Zoho CRM as a standalone function with API name `upload_attachment_to_books`. Accepts `entity_type` (bills/purchaseorders), `entity_id`, `file_name`, `file_data` (base64 string).
-- **Delete API**: `DELETE /bills/{id}/attachment?documents={doc_id}` — fires immediately when the user clicks the delete icon in edit mode
-- **Known SDK limitation**: `ZOHO.CRM.CONNECTION.getAuthToken` does not exist in ZohoEmbededAppSDK v1.2 or v1.3; `CONNECTION.invoke` cannot transmit binary data; binary uploads must go through the Deluge proxy
+- **Upload flow (CRM-attach + Deluge relay)**:
+  1. Widget calls `ZOHO.CRM.API.attachFile({Entity: "Vendors", RecordID: crmVendorId, File: {Name, Content}})` to stage the file on the current CRM Vendor record. The SDK handles multipart/binary natively, so file size is bounded only by Books' own 10 MB limit.
+  2. Widget calls the `upload_attachment_to_books` Deluge function via `ZOHO.CRM.FUNCTIONS.execute`, passing only `entity_type`, `entity_id`, `crm_module`, `crm_record_id`, `crm_attachment_id` (tiny payload — no binary).
+  3. Deluge downloads the staged file from CRM via `invokeurl` GET on `/crm/v7/{module}/{record_id}/Attachments/{attachment_id}` using the `zoho_crm_conn_1` connection, calls `file_obj.setParamName("attachment")` to force the multipart field name Books expects, then POSTs to Books via `invokeurl` using the `zoho_books_testing` connection.
+- **Why this architecture**: Earlier attempts sent base64-encoded file bytes through `FUNCTIONS.execute`, but the widget proxy (`crm.zoho.com/crm/v2/functions/{name}/actions/execute`) rejects payloads above ~500 KB with `413 Content Too Large`. Staging via `attachFile` bypasses that proxy entirely. `ZOHO.CRM.CONNECTION.invoke` is not a viable alternative because it JSON-stringifies parameters (confirmed in SDK v1.2 source: `f.parameters=JSON.stringify(d.parameters)`), losing binary content.
+- **Deluge proxy function**: `uploadAttachmentToBooks.dg` — must be registered in Zoho CRM as a standalone function with API name `upload_attachment_to_books`, accepting a single `Map arguments` parameter.
+- **Required Zoho connections**:
+  - `zoho_crm_conn_1` — CRM self-connection used to download the staged attachment. Scopes: `ZohoCRM.modules.ALL`, `ZohoCRM.files.ALL`.
+  - `zoho_books_testing` — Books connection used to upload the file to the bill/PO.
+- **Books field name**: Books' `/bills/{id}/attachment` and `/purchaseorders/{id}/attachment` endpoints require the multipart field to be literally named `attachment`. Without `setParamName("attachment")`, Books returns `{"code":33003,"message":"Attachment not found."}`.
+- **Delete API**: `DELETE /bills/{id}/attachment?documents={doc_id}` — fires immediately when the user clicks the delete icon in edit mode.
+- **Known SDK limitations**: `ZOHO.CRM.CONNECTION.getAuthToken` does not exist in ZohoEmbededAppSDK v1.2/v1.3; `CONNECTION.invoke` cannot transmit binary data; `FUNCTIONS.execute` has a ~500 KB payload cap on its widget proxy route.
 
 ## API Patterns
 

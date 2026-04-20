@@ -20,7 +20,7 @@ const PAYMENT_TERMS = [
   { value: 30, label: "Net 30" }, { value: 45, label: "Net 45" }, { value: 60, label: "Net 60" },
 ];
 
-const STEPS = ["Basic Info", "Items", "Totals & Notes"];
+const STEPS = ["Basic Info", "Items", "Totals & Notes", "Attachments"];
 
 export default function PurchaseOrderForm({
   vendor, items, taxes, accounts, editPoId, onBack, readOnly = false, customFieldsMeta = [],
@@ -207,7 +207,7 @@ export default function PurchaseOrderForm({
         let failed = 0;
         const errors = [];
         for (const file of pendingFiles) {
-          try { await uploadPoAttachment(savedPoId, file); }
+          try { await uploadPoAttachment(savedPoId, file, vendor.crmId); }
           catch (err) {
             console.error("[PurchaseOrderForm] attachment upload failed:", file.name, err.message);
             errors.push(file.name + ": " + err.message);
@@ -255,7 +255,7 @@ export default function PurchaseOrderForm({
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", pr: 0.5 }}>
+      <Box sx={{ flex: 1, overflowX: "hidden", pr: 0.5 }}>
         {step === 0 && (
           <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
             <Grid container spacing={2}>
@@ -345,16 +345,18 @@ export default function PurchaseOrderForm({
 
             <CustomFieldsSection customFields={customFieldsMeta} values={customValues}
               setValues={setCustomValues} readOnly={readOnly} />
-
-            <AttachmentsSection
-              attachments={attachments}
-              pendingFiles={pendingFiles}
-              onAddFiles={handleAddFiles}
-              onDeleteExisting={handleDeleteExisting}
-              onDeletePending={handleDeletePending}
-              readOnly={readOnly}
-            />
           </>
+        )}
+
+        {step === 3 && (
+          <AttachmentsSection
+            attachments={attachments}
+            pendingFiles={pendingFiles}
+            onAddFiles={handleAddFiles}
+            onDeleteExisting={handleDeleteExisting}
+            onDeletePending={handleDeletePending}
+            readOnly={readOnly}
+          />
         )}
       </Box>
 

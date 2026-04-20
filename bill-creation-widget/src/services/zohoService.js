@@ -169,27 +169,29 @@ export async function rejectBill(billId) {
 
 /* ========== Bill Attachments ========== */
 
-async function readFileAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+export async function uploadBillAttachment(billId, file, crmVendorId) {
+  // Stage the file on the CRM Vendor record — SDK handles binary natively,
+  // avoiding the ~500KB payload cap on the FUNCTIONS.execute proxy.
+  const attachResp = await window.ZOHO.CRM.API.attachFile({
+    Entity: "Vendors",
+    RecordID: crmVendorId,
+    File: { Name: file.name, Content: file },
   });
-}
+  console.log("[uploadBillAttachment] CRM attachFile raw:", JSON.stringify(attachResp));
+  const attachmentId =
+    attachResp?.data?.[0]?.details?.id ||
+    attachResp?.data?.[0]?.id ||
+    attachResp?.details?.id;
+  if (!attachmentId) throw new Error("Failed to stage attachment on CRM Vendor record");
 
-export async function uploadBillAttachment(billId, file) {
-  const fileData = await readFileAsBase64(file);
-  const resp = await window.ZOHO.CRM.FUNCTIONS.execute({
-    api_name: "upload_attachment_to_books",
-    params: {
-      arguments: JSON.stringify({
-        entity_type: "bills",
-        entity_id: billId,
-        file_name: file.name,
-        file_data: fileData,
-      }),
-    },
+  const resp = await window.ZOHO.CRM.FUNCTIONS.execute("upload_attachment_to_books", {
+    arguments: JSON.stringify({
+      entity_type: "bills",
+      entity_id: billId,
+      crm_module: "Vendors",
+      crm_record_id: crmVendorId,
+      crm_attachment_id: attachmentId,
+    }),
   });
   console.log("[uploadBillAttachment] FUNCTIONS.execute raw:", JSON.stringify(resp));
   const output = resp?.details?.output;

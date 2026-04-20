@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Box, Typography, Button, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, CircularProgress, Alert,
+  TableContainer, TableHead, TableRow, TablePagination, Chip, CircularProgress, Alert,
   Paper, IconButton, Tooltip, Snackbar, Popover, Link,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from "@mui/material";
@@ -59,6 +59,10 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
+
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+  useEffect(() => { setPage(0); }, [pos.length]);
 
   const loadInitial = useCallback(async () => {
     try {
@@ -330,7 +334,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
           </Tooltip>
         </Box>
 
-        <TableContainer sx={{ flex: 1, overflowY: "auto" }}>
+        <TableContainer sx={{ flex: 1 }}>
           {pos.length === 0 ? (
             <Box sx={{ py: 6, textAlign: "center" }}>
               <ShoppingCartIcon sx={{ fontSize: 48, color: "text.disabled", mb: 1 }} />
@@ -353,7 +357,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
                 </TableRow>
               </TableHead>
               <TableBody>
-                {pos.map((p) => {
+                {pos.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((p) => {
                   const hasServerBills = (billsByPo[p.purchaseorder_id] || []).length > 0;
                   const isBilled = BILLED_STATUSES.has(p.status) || locallyBilled.has(p.purchaseorder_id) || hasServerBills;
                   const displayStatus = isBilled ? "billed" : p.status;
@@ -418,6 +422,18 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
             </Table>
           )}
         </TableContainer>
+        {pos.length > 0 && (
+          <TablePagination
+            component="div"
+            count={pos.length}
+            page={page}
+            onPageChange={(_, newPage) => setPage(newPage)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+            rowsPerPageOptions={[5, 10, 25, 50]}
+            sx={{ borderTop: 1, borderColor: "divider" }}
+          />
+        )}
       </Paper>
 
       <Dialog open={!!issueConfirm} onClose={() => !issuing && setIssueConfirm(null)}>

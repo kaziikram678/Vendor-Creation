@@ -1,22 +1,40 @@
-string standalone.upload_attachment_to_books(String entity_type, String entity_id, String file_name, String file_data)
+string standalone.upload_attachment_to_books(Map arguments)
 {
-	// entity_type: "bills" or "purchaseorders"
-	// entity_id:   the Books bill/PO ID
-	// file_name:   original filename (e.g. "invoice.pdf")
-	// file_data:   base64-encoded file content (no data: prefix)
+	// arguments keys:
+	//   entity_type:        "bills" or "purchaseorders"
+	//   entity_id:          the Books bill/PO ID
+	//   crm_module:         CRM module API name where the file was staged (e.g. "Vendors")
+	//   crm_record_id:      CRM record ID that owns the attachment
+	//   crm_attachment_id:  attachment ID returned by ZOHO.CRM.API.attachFile
+
+	entity_type = arguments.get("entity_type");
+	entity_id = arguments.get("entity_id");
+	crm_module = arguments.get("crm_module");
+	crm_record_id = arguments.get("crm_record_id");
+	crm_attachment_id = arguments.get("crm_attachment_id");
+
+	// Pull the staged file from CRM. File never passes through FUNCTIONS.execute,
+	// so there is no payload cap — works for any size under Books' own 10 MB limit.
+	download_url = "https://www.zohoapis.com/crm/v7/" + crm_module + "/" + crm_record_id + "/Attachments/" + crm_attachment_id;
+	file_obj = invokeurl
+	[
+		url: download_url
+		type: GET
+		connection: "zoho_crm_conn_1"
+	];
+
+	// Books expects the multipart field to be literally "attachment"
+	file_obj.setParamName("attachment");
 
 	org_id = "771340721";
 	upload_url = "https://www.zohoapis.com/books/v3/" + entity_type + "/" + entity_id
-	           + "/attachment?organization_id=" + org_id + "&can_send_in_mail=false";
-
-	// decodeBase64() is the standalone Deluge function for base64 → raw bytes
-	file_bytes = decodeBase64(file_data);
+	           + "/attachment?organization_id=" + org_id;
 
 	response = invokeurl
 	[
 		url: upload_url
 		type: POST
-		files: {"paramname": "attachment", "content": file_bytes, "filename": file_name}
+		files: file_obj
 		connection: "zoho_books_testing"
 	];
 

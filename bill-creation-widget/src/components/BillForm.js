@@ -21,7 +21,7 @@ const PAYMENT_TERMS = [
   { value: 30, label: "Net 30" }, { value: 45, label: "Net 45" }, { value: 60, label: "Net 60" },
 ];
 
-const STEPS = ["Basic Info", "Items", "Totals & Notes"];
+const STEPS = ["Basic Info", "Items", "Totals & Notes", "Attachments"];
 
 export default function BillForm({
   vendor, items, taxes, accounts, editBillId, onBack, customFieldsMeta = [],
@@ -224,7 +224,7 @@ export default function BillForm({
         let failed = 0;
         const errors = [];
         for (const file of pendingFiles) {
-          try { await uploadBillAttachment(savedBillId, file); }
+          try { await uploadBillAttachment(savedBillId, file, vendor.crmId); }
           catch (err) {
             console.error("[BillForm] attachment upload failed:", file.name, err.message);
             errors.push(file.name + ": " + err.message);
@@ -263,7 +263,7 @@ export default function BillForm({
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", pr: 0.5 }}>
+      <Box sx={{ flex: 1, overflowX: "hidden", pr: 0.5 }}>
         {step === 0 && (
           <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
             <Grid container spacing={2}>
@@ -314,7 +314,7 @@ export default function BillForm({
             <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
               <Grid container spacing={2.5}>
                 <Grid size={{ xs: 12, md: 6 }}>
-                  <TextField label="Notes" multiline minRows={7} value={notes} onChange={(e) => setNotes(e.target.value)}
+                  <TextField label="Notes" multiline minRows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
                     fullWidth size="small" placeholder="Notes (not shown in PDF)" />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
@@ -329,15 +329,17 @@ export default function BillForm({
             </Paper>
 
             <CustomFieldsSection customFields={customFieldsMeta} values={customValues} setValues={setCustomValues} />
-
-            <AttachmentsSection
-              attachments={attachments}
-              pendingFiles={pendingFiles}
-              onAddFiles={handleAddFiles}
-              onDeleteExisting={handleDeleteExisting}
-              onDeletePending={handleDeletePending}
-            />
           </>
+        )}
+
+        {step === 3 && (
+          <AttachmentsSection
+            attachments={attachments}
+            pendingFiles={pendingFiles}
+            onAddFiles={handleAddFiles}
+            onDeleteExisting={handleDeleteExisting}
+            onDeletePending={handleDeletePending}
+          />
         )}
       </Box>
 
