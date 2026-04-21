@@ -77,7 +77,7 @@ npm test           # Run tests
 - **Edit/Delete**: Available on all bills
 - **Form steps**: Basic Info → Items → Totals & Notes → Attachments (4-step stepper; attachments live on their own step so the Totals panel never gets pushed off-screen)
 - **Attachments**: Files attached in widget are uploaded to Books after save; existing Books attachments load on edit; deletions are immediate via DELETE API
-- **Dashboard**: Bill list uses MUI `TablePagination` (default 5 rows/page; options 5/10/25/50) — no internal scroll
+- **Dashboard**: Bill list uses MUI `TablePagination` (default 5 rows/page; options 5/10/25/50) with debounced search (300ms) filtering across Bill#, Reference, Status, Date, Due Date, Total, Balance
 - Items filtered to exclude sales-only items (`item_type !== "sales"`)
 - Due date picker prevents selecting dates before bill date
 - Line items include a description field below the item selector
@@ -91,10 +91,31 @@ npm test           # Run tests
 - **Edit/Delete**: Available on all POs
 - **Form steps**: Basic Info → Items → Totals & Notes → Attachments (same 4-step layout as bill widget)
 - **Attachments**: Same bidirectional sync as bill widget, works in edit and readOnly (view-only) modes
-- **Dashboard**: PO list uses MUI `TablePagination` (default 5 rows/page; options 5/10/25/50)
+- **Dashboard**: PO list uses MUI `TablePagination` (default 5 rows/page; options 5/10/25/50) with debounced search (300ms) filtering across PO#, Reference, Status, Date, Delivery Date, Total
 - Items filtered to exclude sales-only items
 - Accounts fetched from multiple types: Expense, CostOfGoodsSold, FixedAsset, OtherCurrentAsset
 - Line items include a description field below the item selector
+
+## Custom Fields Feature (Bill Widget)
+
+- **Location**: Custom fields from Zoho Books appear on **Step 1 (Basic Info)** of the bill form, below the standard date/payment-terms fields.
+- **Fetch strategy**: `fetchCustomFields("bill")` in `zohoService.js` tries two endpoints in order:
+  1. `/settings/customfields?entity=bill`
+  2. `/settings/customfields?entity_type=bill`
+  If both return empty (e.g. scope not granted), falls back to fetching the most recent bill (`/bills?per_page=1`) and deriving field schema from its `custom_fields` array.
+- **Edit mode fallback**: When editing a bill, `BillForm` merges schema from `customFieldsMeta` prop (settings fetch) with definitions embedded in the bill record itself (`bill.custom_fields`). This ensures fields render even if the settings endpoint is inaccessible.
+- **Supported data types**: `string`, `date`, `number`/`decimal`/`amount`/`percent`, `email`, `url`, `multi_line`, `dropdown`, `checkbox` — rendered as appropriate MUI `TextField` variants.
+- **Payload**: Custom field values are serialised as `[{api_name, value}]` under `custom_fields` in the bill create/update payload.
+- **Component**: `CustomFieldsSection.js` — shared render + helper exports `customFieldsToPayload` and `customFieldsFromRecord`.
+
+## Dashboard Search Feature (Both Widgets)
+
+- **Location**: Search bar in the list panel header, left of the Refresh button.
+- **Debounce**: 300ms via `setTimeout`/`clearTimeout` in a `useEffect` — filters only fire after the user pauses typing.
+- **Scope**: Client-side filter over the already-fetched list (no extra API call).
+  - Bill widget: Bill#, Reference, Status, Date, Due Date, Total, Balance.
+  - PO widget: PO#, Reference, Status (including locally-billed override), Date, Delivery Date, Total.
+- **UX details**: Count badge switches to `filtered / total` when a query is active; ×-clear button; empty-state row shows `No items match "query"` inside the table; pagination resets to page 1 on query change.
 
 ## Attachments Feature
 

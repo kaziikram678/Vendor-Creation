@@ -48,7 +48,10 @@ export default function BillForm({
   const [discountAccountId, setDiscountAccountId] = useState("");
   const [adjustmentValue, setAdjustmentValue] = useState("0");
   const [customValues, setCustomValues] = useState({});
+  const [effectiveCustomFields, setEffectiveCustomFields] = useState(customFieldsMeta);
   const [editStatus, setEditStatus] = useState("");
+
+  useEffect(() => { setEffectiveCustomFields(customFieldsMeta); }, [customFieldsMeta]);
   const [validationErrors, setValidationErrors] = useState({});
   const [attachments, setAttachments] = useState([]);
   const [pendingFiles, setPendingFiles] = useState([]);
@@ -77,7 +80,21 @@ export default function BillForm({
       else if (disc && !String(disc).includes("%")) setDiscountType("amount");
       setDiscountAccountId(bill.discount_account_id || "");
 
-      setCustomValues(customFieldsFromRecord(customFieldsMeta, bill));
+      const recordMeta = (bill.custom_fields || [])
+        .filter((cf) => cf.is_active !== false)
+        .map((cf) => ({
+          customfield_id: cf.customfield_id,
+          api_name: cf.api_name,
+          label: cf.label || cf.field_name_formatted || cf.api_name,
+          data_type: (cf.data_type || "string").toLowerCase(),
+          is_mandatory: !!cf.is_mandatory,
+          values: cf.values || [],
+        }));
+      const metaByApi = new Map(customFieldsMeta.map((f) => [f.api_name, f]));
+      recordMeta.forEach((f) => { if (!metaByApi.has(f.api_name)) metaByApi.set(f.api_name, f); });
+      const mergedMeta = Array.from(metaByApi.values());
+      setEffectiveCustomFields(mergedMeta);
+      setCustomValues(customFieldsFromRecord(mergedMeta, bill));
       setAttachments(bill.documents || []);
 
       if (bill.line_items?.length) {
@@ -182,7 +199,7 @@ export default function BillForm({
         })),
       };
 
-      const cfPayload = customFieldsToPayload(customFieldsMeta, customValues);
+      const cfPayload = customFieldsToPayload(effectiveCustomFields, customValues);
       if (cfPayload.length) payload.custom_fields = cfPayload;
 
       const discNum = parseFloat(discountValue) || 0;
@@ -265,41 +282,45 @@ export default function BillForm({
 
       <Box sx={{ flex: 1, overflowX: "hidden", pr: 0.5 }}>
         {step === 0 && (
-          <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField label="Bill#" required value={billNumber} onChange={(e) => setBillNumber(e.target.value)}
-                  fullWidth size="small" error={!!validationErrors.billNumber} helperText={validationErrors.billNumber} />
+          <>
+            <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField label="Bill#" required value={billNumber} onChange={(e) => setBillNumber(e.target.value)}
+                    fullWidth size="small" error={!!validationErrors.billNumber} helperText={validationErrors.billNumber} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField label="Order Number" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} fullWidth size="small" />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField label="Payment Terms" select value={paymentTerms} onChange={(e) => handlePaymentTermsChange(e.target.value)} fullWidth size="small">
+                    {PAYMENT_TERMS.map((pt) => <MenuItem key={pt.value} value={pt.value}>{pt.label}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField label="Bill Date" type="date" required value={billDate} onChange={(e) => setBillDate(e.target.value)}
+                    fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!validationErrors.billDate} helperText={validationErrors.billDate} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField label="Due Date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                    fullWidth size="small" InputLabelProps={{ shrink: true }} inputProps={{ min: billDate }}
+                    error={!!validationErrors.dueDate} helperText={validationErrors.dueDate} />
+                </Grid>
+                <Grid size={{ xs: 6, sm: 2 }}>
+                  <TextField select label="Tax Type" value={taxType} onChange={(e) => setTaxType(e.target.value)} fullWidth size="small">
+                    <MenuItem value="false">Exclusive</MenuItem><MenuItem value="true">Inclusive</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid size={{ xs: 6, sm: 2 }}>
+                  <TextField select label="Tax Level" value={taxLevel} onChange={(e) => setTaxLevel(e.target.value)} fullWidth size="small">
+                    <MenuItem value="true">Item Level</MenuItem><MenuItem value="false">Transaction</MenuItem>
+                  </TextField>
+                </Grid>
               </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField label="Order Number" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} fullWidth size="small" />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField label="Payment Terms" select value={paymentTerms} onChange={(e) => handlePaymentTermsChange(e.target.value)} fullWidth size="small">
-                  {PAYMENT_TERMS.map((pt) => <MenuItem key={pt.value} value={pt.value}>{pt.label}</MenuItem>)}
-                </TextField>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField label="Bill Date" type="date" required value={billDate} onChange={(e) => setBillDate(e.target.value)}
-                  fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!validationErrors.billDate} helperText={validationErrors.billDate} />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField label="Due Date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-                  fullWidth size="small" InputLabelProps={{ shrink: true }} inputProps={{ min: billDate }}
-                  error={!!validationErrors.dueDate} helperText={validationErrors.dueDate} />
-              </Grid>
-              <Grid size={{ xs: 6, sm: 2 }}>
-                <TextField select label="Tax Type" value={taxType} onChange={(e) => setTaxType(e.target.value)} fullWidth size="small">
-                  <MenuItem value="false">Exclusive</MenuItem><MenuItem value="true">Inclusive</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid size={{ xs: 6, sm: 2 }}>
-                <TextField select label="Tax Level" value={taxLevel} onChange={(e) => setTaxLevel(e.target.value)} fullWidth size="small">
-                  <MenuItem value="true">Item Level</MenuItem><MenuItem value="false">Transaction</MenuItem>
-                </TextField>
-              </Grid>
-            </Grid>
-          </Paper>
+            </Paper>
+
+            <CustomFieldsSection customFields={effectiveCustomFields} values={customValues} setValues={setCustomValues} />
+          </>
         )}
 
         {step === 1 && (
@@ -314,7 +335,7 @@ export default function BillForm({
             <Paper elevation={0} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
               <Grid container spacing={2.5}>
                 <Grid size={{ xs: 12, md: 6 }}>
-                  <TextField label="Notes" multiline minRows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
+                  <TextField label="Notes" multiline minRows={8} value={notes} onChange={(e) => setNotes(e.target.value)}
                     fullWidth size="small" placeholder="Notes (not shown in PDF)" />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
@@ -327,8 +348,6 @@ export default function BillForm({
                 </Grid>
               </Grid>
             </Paper>
-
-            <CustomFieldsSection customFields={customFieldsMeta} values={customValues} setValues={setCustomValues} />
           </>
         )}
 

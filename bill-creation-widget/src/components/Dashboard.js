@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box, Typography, Button, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TablePagination, Chip, CircularProgress, Alert,
-  Paper, IconButton, Tooltip, Snackbar,
+  Paper, IconButton, Tooltip, Snackbar, TextField, InputAdornment,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -12,6 +12,8 @@ import PaymentIcon from "@mui/icons-material/Payment";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SendIcon from "@mui/icons-material/Send";
+import SearchIcon from "@mui/icons-material/Search";
+import ClearIcon from "@mui/icons-material/Clear";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 
@@ -54,7 +56,24 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
-  useEffect(() => { setPage(0); }, [bills.length]);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => { setPage(0); }, [bills.length, debouncedSearch]);
+
+  const filteredBills = useMemo(() => {
+    if (!debouncedSearch) return bills;
+    return bills.filter((b) => {
+      const hay = [
+        b.bill_number, b.reference_number, b.status, b.date, b.due_date,
+        b.total != null ? String(b.total) : "", b.balance != null ? String(b.balance) : "",
+      ].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(debouncedSearch);
+    });
+  }, [bills, debouncedSearch]);
 
   const loadInitial = useCallback(async () => {
     try {
@@ -205,16 +224,41 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
         border: 1, borderColor: "divider", borderRadius: 2, overflow: "hidden",
         flex: 1, display: "flex", flexDirection: "column", bgcolor: "background.paper",
       }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 2, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, px: 2, py: 1.5, borderBottom: 1, borderColor: "divider", flexWrap: "wrap" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <ReceiptLongIcon sx={{ fontSize: 20, color: "#1565c0" }} />
-            <Typography fontWeight={700} fontSize={14}>Bills ({bills.length})</Typography>
+            <Typography fontWeight={700} fontSize={14}>
+              Bills ({debouncedSearch ? `${filteredBills.length} / ${bills.length}` : bills.length})
+            </Typography>
           </Box>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => loadBills()} disabled={listLoading}>
-              {listLoading ? <CircularProgress size={18} /> : <RefreshIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1, justifyContent: "flex-end" }}>
+            <TextField
+              size="small"
+              placeholder="Search bill#, reference, status…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{ minWidth: 220, maxWidth: 360, flex: 1 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" sx={{ color: "text.secondary" }} />
+                  </InputAdornment>
+                ),
+                endAdornment: search ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearch("")}>
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              }}
+            />
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => loadBills()} disabled={listLoading}>
+                {listLoading ? <CircularProgress size={18} /> : <RefreshIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
 
         <TableContainer sx={{ flex: 1 }}>
@@ -241,7 +285,14 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
                 </TableRow>
               </TableHead>
               <TableBody>
-                {bills.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((b) => (
+                {filteredBills.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} sx={{ py: 4, textAlign: "center", color: "text.secondary" }}>
+                      No bills match "{debouncedSearch}".
+                    </TableCell>
+                  </TableRow>
+                )}
+                {filteredBills.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((b) => (
                   <TableRow key={b.bill_id} hover sx={{ "&:hover": { bgcolor: "surface.hover" } }}>
                     <TableCell sx={tdStyle}>{b.date}</TableCell>
                     <TableCell sx={{ ...tdStyle, fontWeight: 600, color: "#1565c0", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}
@@ -288,7 +339,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
         {bills.length > 0 && (
           <TablePagination
             component="div"
-            count={bills.length}
+            count={filteredBills.length}
             page={page}
             onPageChange={(_, newPage) => setPage(newPage)}
             rowsPerPage={rowsPerPage}

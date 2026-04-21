@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box, Typography, Button, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TablePagination, Chip, CircularProgress, Alert,
-  Paper, IconButton, Tooltip, Snackbar, Popover, Link,
+  Paper, IconButton, Tooltip, Snackbar, Popover, Link, TextField, InputAdornment,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -13,6 +13,8 @@ import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import SearchIcon from "@mui/icons-material/Search";
+import ClearIcon from "@mui/icons-material/Clear";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 
@@ -62,7 +64,27 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
-  useEffect(() => { setPage(0); }, [pos.length]);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => { setPage(0); }, [pos.length, debouncedSearch]);
+
+  const filteredPos = useMemo(() => {
+    if (!debouncedSearch) return pos;
+    return pos.filter((p) => {
+      const hasServerBills = (billsByPo[p.purchaseorder_id] || []).length > 0;
+      const isBilled = BILLED_STATUSES.has(p.status) || locallyBilled.has(p.purchaseorder_id) || hasServerBills;
+      const displayStatus = isBilled ? "billed" : p.status;
+      const hay = [
+        p.purchaseorder_number, p.reference_number, displayStatus, p.date, p.delivery_date,
+        p.total != null ? String(p.total) : "",
+      ].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(debouncedSearch);
+    });
+  }, [pos, debouncedSearch, billsByPo, locallyBilled]);
 
   const loadInitial = useCallback(async () => {
     try {
@@ -322,16 +344,41 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
         border: 1, borderColor: "divider", borderRadius: 2, overflow: "hidden",
         flex: 1, display: "flex", flexDirection: "column", bgcolor: "background.paper",
       }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 2, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, px: 2, py: 1.5, borderBottom: 1, borderColor: "divider", flexWrap: "wrap" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <ShoppingCartIcon sx={{ fontSize: 20, color: "#1565c0" }} />
-            <Typography fontWeight={700} fontSize={14}>Purchase Orders ({pos.length})</Typography>
+            <Typography fontWeight={700} fontSize={14}>
+              Purchase Orders ({debouncedSearch ? `${filteredPos.length} / ${pos.length}` : pos.length})
+            </Typography>
           </Box>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => loadPOs()} disabled={listLoading}>
-              {listLoading ? <CircularProgress size={18} /> : <RefreshIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1, justifyContent: "flex-end" }}>
+            <TextField
+              size="small"
+              placeholder="Search PO#, reference, status…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{ minWidth: 220, maxWidth: 360, flex: 1 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" sx={{ color: "text.secondary" }} />
+                  </InputAdornment>
+                ),
+                endAdornment: search ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearch("")}>
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              }}
+            />
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => loadPOs()} disabled={listLoading}>
+                {listLoading ? <CircularProgress size={18} /> : <RefreshIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
 
         <TableContainer sx={{ flex: 1 }}>
@@ -357,7 +404,14 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
                 </TableRow>
               </TableHead>
               <TableBody>
-                {pos.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((p) => {
+                {filteredPos.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ py: 4, textAlign: "center", color: "text.secondary" }}>
+                      No purchase orders match "{debouncedSearch}".
+                    </TableCell>
+                  </TableRow>
+                )}
+                {filteredPos.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((p) => {
                   const hasServerBills = (billsByPo[p.purchaseorder_id] || []).length > 0;
                   const isBilled = BILLED_STATUSES.has(p.status) || locallyBilled.has(p.purchaseorder_id) || hasServerBills;
                   const displayStatus = isBilled ? "billed" : p.status;
@@ -425,7 +479,7 @@ export default function Dashboard({ entityId, mode = "light", onToggleMode = () 
         {pos.length > 0 && (
           <TablePagination
             component="div"
-            count={pos.length}
+            count={filteredPos.length}
             page={page}
             onPageChange={(_, newPage) => setPage(newPage)}
             rowsPerPage={rowsPerPage}

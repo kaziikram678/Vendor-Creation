@@ -109,24 +109,49 @@ export async function fetchChartOfAccounts() {
   }));
 }
 
+const normalizeCustomField = (f) => ({
+  customfield_id: f.customfield_id,
+  api_name: f.api_name,
+  label: f.label || f.field_name_formatted || f.api_name,
+  data_type: (f.data_type || "string").toLowerCase(),
+  is_mandatory: !!f.is_mandatory,
+  values: f.values || [],
+});
+
 export async function fetchCustomFields(entityType) {
+  const tryFetch = async (qs) => {
+    const data = await booksApi("GET", `/settings/customfields?${qs}`);
+    return data.customfields || data.custom_fields || [];
+  };
+  let list = [];
   try {
-    const data = await booksApi("GET", `/settings/customfields?entity_type=${entityType}`);
-    const list = data.customfields || data.custom_fields || [];
-    return list
-      .filter((f) => f.is_active !== false && f.show_in_all_pdf !== false)
-      .map((f) => ({
-        customfield_id: f.customfield_id,
-        api_name: f.api_name,
-        label: f.label || f.field_name_formatted || f.api_name,
-        data_type: (f.data_type || "string").toLowerCase(),
-        is_mandatory: !!f.is_mandatory,
-        values: f.values || [],
-      }));
+    list = await tryFetch(`entity=${entityType}`);
+    if (!list.length) list = await tryFetch(`entity_type=${entityType}`);
   } catch (err) {
-    console.warn("fetchCustomFields failed:", err.message);
-    return [];
+    console.warn("[fetchCustomFields] settings endpoint failed:", err.message);
   }
+  console.log(`[fetchCustomFields] settings entity=${entityType} → ${list.length} field(s)`);
+
+  if (list.length) {
+    return list.filter((f) => f.is_active !== false).map(normalizeCustomField);
+  }
+
+  if (entityType === "bill") {
+    try {
+      const data = await booksApi("GET", "/bills?per_page=1&sort_column=created_time&sort_order=D");
+      const sampleId = data.bills?.[0]?.bill_id;
+      if (sampleId) {
+        const full = await booksApi("GET", `/bills/${sampleId}`);
+        const cfs = full.bill?.custom_fields || [];
+        console.log(`[fetchCustomFields] fallback via latest bill → ${cfs.length} field(s)`);
+        return cfs.filter((f) => f.is_active !== false).map(normalizeCustomField);
+      }
+    } catch (err) {
+      console.warn("[fetchCustomFields] bill-sample fallback failed:", err.message);
+    }
+  }
+
+  return [];
 }
 
 /* ========== Bills ========== */
